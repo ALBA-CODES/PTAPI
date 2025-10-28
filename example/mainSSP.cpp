@@ -24,8 +24,8 @@ int main(int argc, char* argv[])
 	float tempIni = 0.01;
 	float tempfim = 2.0;
 	int tempN = 10;
-	int MCL = 0;
-	int PTL = 2;	
+	int MCL = 10;
+	int PTL = 10;	
 	int tempUp = 50;
 	int tempD = 1;
 	int uType = 0;
@@ -37,8 +37,7 @@ int main(int argc, char* argv[])
 	
 	// Read arguments
 	for(unsigned int i=1; i<arguments.size(); i+=2)
-	{
-		            
+	{		            
         if(arguments[i]== "--TEMP_FIM")
             tempfim = std::stof(arguments[i+1]);
         else if(arguments[i]== "--TEMP_INIT")
@@ -63,11 +62,14 @@ int main(int argc, char* argv[])
 	SSP* prob = new SSP(fn);
 	
 	// Create and start PT 
+
 	PT<solSSP> algo(tempIni,tempfim,tempN,MCL,PTL,tempD,uType,tempUp);
+	algo.setTimeEnd(50);
 	ExecTime et;
 	solSSP sol = algo.start(thN, prob);
+	int index = algo.getBestPTLSolIndex();
 	et.printTime();
-	std::cout<<sol.evalSol<<"\n";
+	std::cout<<"Best sol value:"<<sol.evalSol<<" PTL index:"<<index<<"\n";
 
 	return 0;
 }

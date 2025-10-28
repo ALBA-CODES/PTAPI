@@ -19,10 +19,12 @@ class Node{
 		atomic<int>* execMax;
 		mutex mtxNode;
 		int execAtual = 0; 
+		int maxtime = 0;
 		bool endN = false; 
 		atomic<int>* indexPT;
 		vector<std::pair<Node*,bool>> edgeFrom;
 		vector<std::pair<Node*,bool>> edgeto;
+		std::chrono::high_resolution_clock::time_point start;
 	public:
 		Node();
 		~Node();
@@ -39,6 +41,7 @@ class Node{
 };
 
 Node::Node(){
+	start = std::chrono::high_resolution_clock::now();
 }
 
 Node::~Node(){
@@ -65,6 +68,11 @@ void Node::reset(){
 
 bool Node::theEnd(){
 	execAtual++;
+	auto duration = std::chrono::high_resolution_clock::now() - start;
+	if((maxtime > 0) && (std::chrono::duration_cast<std::chrono::seconds>(duration).count() >= maxtime)){ 
+	//	std::cout <<"current PTL:" << execAtual<<"\n";
+		return true;
+	} 
 	
 	return (*execMax <= execAtual);
 }

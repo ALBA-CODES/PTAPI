@@ -35,7 +35,7 @@ class NodeMCMC: public Node{
 
 	public:
 		
-		NodeMCMC(int MCL_,atomic<int>* PTL_, double temp_, Problem<S>* prob_,Consumer<S>* pool_);
+		NodeMCMC(int MCL_,atomic<int>* PTL_, double temp_, Problem<S>* prob_,Consumer<S>* pool_, int timePTEnd);
 		~NodeMCMC();
 		void run();
 		bool ready();
@@ -61,13 +61,14 @@ class NodeMCMC: public Node{
 
 
 template<typename S>
-NodeMCMC<S>::NodeMCMC(int MCL_, atomic<int>* PTL_, double temp_, Problem<S>* prob_,Consumer<S>* pool_)
+NodeMCMC<S>::NodeMCMC(int MCL_, atomic<int>* PTL_, double temp_, Problem<S>* prob_,Consumer<S>* pool_, int timePTEnd)
 :MCL(MCL_)
 ,temp(temp_)
 ,prob(prob_)
 ,pool(pool_)
 {
 	execMax = PTL_;
+	maxtime = timePTEnd;
 	indexPT = pool_->getIndexPT();
 	sol = prob->construction();
 	bestSol = sol;
@@ -204,7 +205,8 @@ void NodeMCMC<S>::setSol(S sol_){
 template<typename S>
 bool NodeMCMC<S>::setBestSol(S sol_){
 	if (sol_.evalSol<bestSol.evalSol) {
-		bestSol=sol_;
+		bestSol = sol_;
+		pool->setBestSol(sol_,execAtual);
 		return true;
 	}
 	

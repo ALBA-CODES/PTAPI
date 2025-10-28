@@ -15,7 +15,7 @@ SSP::SSP(std::string filename){
 		
 		getline(ifs,line);
 		numberJobs = std::stoi(line);
-
+		
 		getline(ifs,line);
 		numberTools = std::stoi(line);
 		
@@ -27,7 +27,7 @@ SSP::SSP(std::string filename){
 		while(getline(ifs,line)){
 			
 			std::stringstream ss(line);
-			while ( getline (ss ,line, ' ')){
+			while ( getline(ss ,line, ' ')){
 				toolJob[i][j] = std::stoi(line);
 				if(toolJob[i][j]){ 
 					JobTools[j].push_back(i);
@@ -36,7 +36,7 @@ SSP::SSP(std::string filename){
 			j++;
 			}
 		j=0;
-		i++;		
+		i++;	
 		}
 	ifs.close();
 	

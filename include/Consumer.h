@@ -34,6 +34,7 @@ class Consumer{
 		bool theEnd();
 		bool theEnd(S sol_);
 		void setMaxEnd(int maxEnd_);
+		void setBestSol(S b, unsigned i);
 		void setMaxEnd();
 		S getBestSol();
 		int getEnd();
@@ -93,9 +94,17 @@ bool Consumer<S>::theEnd(S sol_){
 	{
 		unique_lock<mutex> lock{mtxSol};
 		end++;
-		if (sol_.evalSol<bestSol.evalSol) bestSol=sol_;
+		if (sol_.evalSol < bestSol.evalSol) bestSol=sol_;
 	}
 return (maxEnd <= end);	
+}
+
+template<typename S>
+void Consumer<S>::setBestSol(S b, unsigned i){
+	if(b.evalSol < bestV){
+		bestV = b.evalSol;
+		indexPT = i;
+	}
 }
 
 template<typename S>

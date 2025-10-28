@@ -29,6 +29,8 @@ class PT{
 		int PTL_; // number of swaps
 		int ut; // update type
 		int tempUpdate; // number of swaps to update de temp
+		int indexBestPTL; // Best PTL solution
+		int timePTEnd = 0; // Time to finish the PT execution
 		std::deque<double> allTemps;
 		S best;
 	public:
@@ -37,6 +39,8 @@ class PT{
 		~PT();
 		S start(int thN, Problem<S>* prob);
 		S getBestSol();
+		int getBestPTLSolIndex();
+		void setTimeEnd(int timeEnd);
 		std::deque<double> tempPG(float tempMin, float tempMax, int tempL); 
 		std::deque<double> tempExp(float tempMin, float tempMax, int tempL); 
 		std::deque<double> tempLinear(float tempMin, float tempMax, int tempL); 
@@ -99,14 +103,14 @@ S PT<S>::start(int thN, Problem<S>* prob){
 	Node* nUpTempAux;
 		    
     // Creates the first MCMC node
-	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer);
+	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer, timePTEnd);
 	((NodeMCMC<S>*)nMCMC)->setFirstTemp(); // check First temp 
 	consumer->setMaxEnd();
 	allTemps.pop_front();
 	nMCMCAux = nMCMC; 
 		
     // Creates the second MCMC node
-	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer);
+	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer, timePTEnd);
 	consumer->setMaxEnd();
 	allTemps.pop_front();
 	
@@ -146,7 +150,7 @@ S PT<S>::start(int thN, Problem<S>* prob){
 	// Create the remaining nodes	
 	while(!allTemps.empty()){
 
-		nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd, allTemps.front(),prob, consumer);
+		nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd, allTemps.front(),prob, consumer, timePTEnd);
 		consumer->setMaxEnd();
 		allTemps.pop_front();
 
@@ -192,6 +196,9 @@ S PT<S>::start(int thN, Problem<S>* prob){
 
 consumer->finished();
 best = consumer->getBestSol();
+std::atomic<int>*  indexPT = consumer->getIndexPT(); 
+indexBestPTL = (*indexPT).load(); 
+
 return best;
 
 }
@@ -259,6 +266,16 @@ std::deque<double> PT<S>::tempILinear(float tempMin, float tempMax, int tempL){
 template<typename S>
 S PT<S>::getBestSol(){
  return best;
+}
+
+template<typename S>
+int PT<S>::getBestPTLSolIndex(){
+ return indexBestPTL;
+}
+
+template<typename S>
+void PT<S>::setTimeEnd(int timeEnd){
+ timePTEnd = timeEnd;
 }
 
 
