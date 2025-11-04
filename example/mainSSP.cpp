@@ -64,7 +64,8 @@ int main(int argc, char* argv[])
 	// Create and start PT 
 
 	PT<solSSP> algo(tempIni,tempfim,tempN,MCL,PTL,tempD,uType,tempUp);
-	algo.setTimeEnd(50);
+	// algo.setPTLStopEnd(0.1); Parar o PT se não encontrar uma solução melhor após (0.1 * PTL)  
+	// algo.setTimeEnd(50); Parar por tempo em segundos
 	ExecTime et;
 	solSSP sol = algo.start(thN, prob);
 	int index = algo.getBestPTLSolIndex();

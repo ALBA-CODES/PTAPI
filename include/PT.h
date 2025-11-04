@@ -24,6 +24,7 @@ class PT{
 		// PT varibles
 		float tempMin_; // init temp
 		float tempMax_; // end temp
+		float perPTLEnd = 0.0; // PT end PTL best sol
 		int tempL_; // temp size
 		int MKL_; // MC length
 		int PTL_; // number of swaps
@@ -41,6 +42,7 @@ class PT{
 		S getBestSol();
 		int getBestPTLSolIndex();
 		void setTimeEnd(int timeEnd);
+		void setPTLStopEnd(float per);
 		std::deque<double> tempPG(float tempMin, float tempMax, int tempL); 
 		std::deque<double> tempExp(float tempMin, float tempMax, int tempL); 
 		std::deque<double> tempLinear(float tempMin, float tempMax, int tempL); 
@@ -103,14 +105,14 @@ S PT<S>::start(int thN, Problem<S>* prob){
 	Node* nUpTempAux;
 		    
     // Creates the first MCMC node
-	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer, timePTEnd);
+	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer, timePTEnd, perPTLEnd);
 	((NodeMCMC<S>*)nMCMC)->setFirstTemp(); // check First temp 
 	consumer->setMaxEnd();
 	allTemps.pop_front();
 	nMCMCAux = nMCMC; 
 		
     // Creates the second MCMC node
-	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer, timePTEnd);
+	nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd,allTemps.front(), prob, consumer, timePTEnd, perPTLEnd);
 	consumer->setMaxEnd();
 	allTemps.pop_front();
 	
@@ -150,7 +152,7 @@ S PT<S>::start(int thN, Problem<S>* prob){
 	// Create the remaining nodes	
 	while(!allTemps.empty()){
 
-		nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd, allTemps.front(),prob, consumer, timePTEnd);
+		nMCMC = new NodeMCMC<S>(MKL_,&PTLEnd, allTemps.front(),prob, consumer, timePTEnd, perPTLEnd);
 		consumer->setMaxEnd();
 		allTemps.pop_front();
 
@@ -276,6 +278,11 @@ int PT<S>::getBestPTLSolIndex(){
 template<typename S>
 void PT<S>::setTimeEnd(int timeEnd){
  timePTEnd = timeEnd;
+}
+
+template<typename S>
+void PT<S>::setPTLStopEnd(float per){
+ perPTLEnd = per;
 }
 
 

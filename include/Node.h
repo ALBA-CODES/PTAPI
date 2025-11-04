@@ -20,6 +20,7 @@ class Node{
 		mutex mtxNode;
 		int execAtual = 0; 
 		int maxtime = 0;
+		float maxPercPTL = 0.0;
 		bool endN = false; 
 		atomic<int>* indexPT;
 		vector<std::pair<Node*,bool>> edgeFrom;
@@ -70,6 +71,10 @@ bool Node::theEnd(){
 	execAtual++;
 	auto duration = std::chrono::high_resolution_clock::now() - start;
 	if((maxtime > 0) && (std::chrono::duration_cast<std::chrono::seconds>(duration).count() >= maxtime)){ 
+		return true;
+	}
+	
+	if((maxPercPTL > 0.0) && ((*indexPT+(*execMax * maxPercPTL)) < execAtual)){
 	//	std::cout <<"current PTL:" << execAtual<<"\n";
 		return true;
 	} 
