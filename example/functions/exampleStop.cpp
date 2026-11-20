@@ -9,6 +9,7 @@
  *
  *   g++ exampleStop.cpp -std=c++17 -O3 -pthread -o exampleStop
  */
+#include <algorithm>
 #include <thread>
 #include <chrono>
 #include "tsp.h"
@@ -104,10 +105,11 @@ int main(){
 
 	{	// 9) any other rule: a function called at the end of every round.
 		//    Here: stop when the search spent 3 times as long without improving as
-		//    it took to find the current best (and at least 50 ms have passed).
+		//    it took to find the current best, or half a second, whichever comes
+		//    first (and at least 50 ms have passed).
 		PT<solTSP> algo(1.0f, 60.0f, 12, 200, manyRounds, 4, 0, 50);
 		algo.setStopCondition([](const PTStatus& st){
-			return st.elapsedMs > 50.0 && (st.elapsedMs - st.bestMs) > 3.0*st.bestMs;
+			return st.elapsedMs > 50.0 && (st.elapsedMs - st.bestMs) > std::min(3.0*st.bestMs, 500.0);
 		});
 		algo.setTimeLimit(10.0);
 		solTSP s = algo.start(0, &prob);

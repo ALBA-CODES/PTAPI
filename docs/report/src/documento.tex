@@ -443,9 +443,9 @@ stopped by another thread    best   7459   stopped at round    1445     151.4 ms
 Um critério escrito pelo usuário e, em seguida, a saída de \code{exampleStop} para os gatilhos novos; a última coluna é o motivo do término:
 
 \begin{lstlisting}[style=cpp]
-// para quando a busca passou, sem melhorar, três vezes o tempo que levou para achar a melhor atual
+// para quando a busca passou, sem melhorar, três vezes o tempo da melhor atual (no máximo 0,5 s)
 algo.setStopCondition([](const PTStatus& st){
-    return st.elapsedMs > 50.0 && (st.elapsedMs - st.bestMs) > 3.0*st.bestMs;
+    return st.elapsedMs > 50.0 && (st.elapsedMs - st.bestMs) > std::min(3.0*st.bestMs, 500.0);
 });
 \end{lstlisting}
 
