@@ -1,7 +1,7 @@
 /*
  * main.cpp
  * 
- * Copyright 2021 André Luis <André Luis@DESKTOP-HDL2CBS> 
+ * Copyright 2021 André Luis
  *
  * Compilation Instructions (PTAPI v2, C++17 or newer)
  * g++ mainSSP.cpp SSP.cpp -std=c++17 -O3 -pthread -o mainSSP

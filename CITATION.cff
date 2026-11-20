@@ -11,11 +11,11 @@ authors:
 preferred-citation:
   type: thesis
   thesis-type: "Doctoral thesis"
-  # TODO: check the title against the cover of the thesis (the PDF metadata has a gap after the colon)
-  title: "Revisitando o Revenimento Paralelo: Computação de Alto Desempenho e Aplicação em Pesquisa Operacional"
+  title: "Revisitando o revenimento paralelo: computação de alto desempenho e aplicação em pesquisa operacional"
   authors:
     - family-names: "Almeida"
       given-names: "André Luís Barroso"
   institution:
     name: "Universidade Federal de Ouro Preto"
   year: 2024
+  url: "https://www.repositorio.ufop.br/handle/123456789/18678"

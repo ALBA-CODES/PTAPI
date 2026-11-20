@@ -37,4 +37,4 @@ publisher before being cited.
 
 ## The API
 
-- ALMEIDA, A. L. B. Doctoral thesis, Universidade Federal de Ouro Preto, 2024. — The dataflow implementation for multi-core CPUs (chapter 5) and the three temperature updates of version 1. See [`CITATION.cff`](../CITATION.cff).
+- ALMEIDA, A. L. B. *Revisitando o revenimento paralelo: computação de alto desempenho e aplicação em pesquisa operacional*. Doctoral thesis, Universidade Federal de Ouro Preto, 2024. <https://www.repositorio.ufop.br/handle/123456789/18678> — The dataflow implementation for multi-core CPUs (chapter 5) and the three temperature updates of version 1. See [`CITATION.cff`](../CITATION.cff).
