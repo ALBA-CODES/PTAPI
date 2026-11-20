@@ -1,0 +1,35 @@
+# build products
+*.o
+*.out
+*.tmp
+build/
+
+# tests
+tests/test_ptapi
+tests/test_ptapi_tsan
+tests/test_ptapi_asan
+
+# examples: the programs (the sources are example*.cpp and main*.cpp)
+example/quickstart
+example/exampleTSP
+example/mainSSP
+example/mainIPMTC
+example/mainRCPMS
+example/functions/example*
+!example/functions/example*.cpp
+*.ckpt
+
+# irace
+irace/ptSSP
+irace/irace.Rdata
+irace/*.Rdata
+
+# report (LaTeX intermediates)
+docs/report/src/build/
+
+# editors and systems
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

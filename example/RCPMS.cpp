@@ -60,8 +60,8 @@ solRCPMS RCPMS::construction(){
 	
 	solRCPMS ss;
 	std::vector<int> v(numberTools);
-	std::random_device rnd_device;
-	std::mt19937 mersenne_engine {rnd_device()};
+	// v2: random engine of the replica (fast and reproducible with PT::setSeed)
+	ptapi::Rng& mersenne_engine = ptapi::rng();
 	
 	// create vector
 	std::iota(v.begin(), v.end(), 0);	
@@ -92,8 +92,6 @@ solRCPMS RCPMS::construction(){
 	ss.cutEnd.push_back(numberJobs);
 	
 	ss.evalSol = evaluate(ss);
-	ss.Nup = false;
-	ss.Ndown = false;
 	
  
 	return ss;
@@ -112,8 +110,8 @@ solRCPMS RCPMS::neighbor(solRCPMS sol){
 	
 	int first = 0;
 	int last = 0;
-	std::random_device rnd_device;
-	std::mt19937 mersenne_engine {rnd_device()};
+	// v2: random engine of the replica (fast and reproducible with PT::setSeed)
+	ptapi::Rng& mersenne_engine = ptapi::rng();
 	std::uniform_int_distribution<int> dist {0, (numberJobs-1)};
 	
 	do {		
@@ -129,8 +127,6 @@ solRCPMS RCPMS::neighbor(solRCPMS sol){
 		last--;
 	}
 	
-	s.Nup = sol.Nup;
-	s.Ndown = sol.Ndown;
 
 	solRCPMS best = s;
 	
@@ -169,7 +165,7 @@ solRCPMS RCPMS::neighbor(solRCPMS sol){
 	return best;	
 }
 
-double RCPMS::evaluate(solRCPMS sol){
+double RCPMS::evaluate(const solRCPMS& sol){
 	
 	int max = 0;
 	int m = 0;

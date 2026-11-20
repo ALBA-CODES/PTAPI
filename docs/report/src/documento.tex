@@ -1,0 +1,1300 @@
+% PTAPI v2 - documento tecnico.
+% Compilar com LuaLaTeX (tres passagens, por causa do sumario):
+%     make            (nesta pasta)   ou   latexmk -lualatex documento.tex
+\documentclass[10pt,a4paper]{article}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmainfont{Libertinus Serif}
+\setsansfont{Libertinus Sans}[BoldItalicFont={Libertinus Sans Bold}, BoldItalicFeatures={FakeSlant=0.18}]
+\setmonofont{DejaVu Sans Mono}[Scale=0.80]
+\setmathfont{Libertinus Math}
+\usepackage[brazilian]{babel}
+\usepackage[a4paper,top=24mm,bottom=26mm,left=22mm,right=22mm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{booktabs,tabularx,array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[skins,breakable]{tcolorbox}
+\usepackage[hidelinks,pdftitle={PTAPI versão 2: alterações, métodos e guia de uso}]{hyperref}
+
+\definecolor{azul}{HTML}{1F3A5F}
+\definecolor{ouro}{HTML}{9A8A55}
+\definecolor{fundocod}{HTML}{F6F8FA}
+\definecolor{fundosai}{HTML}{FBFAF5}
+\definecolor{cinza}{HTML}{555555}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em plus 0.1em minus 0.05em}
+\linespread{1.06}
+\setlist{topsep=0.2em,itemsep=0.15em,parsep=0.1em,leftmargin=1.6em}
+\emergencystretch=2em
+
+\titleformat{\section}{\sffamily\bfseries\Large\color{azul}}{\thesection}{0.8em}{}[{\color{azul}\titlerule[0.8pt]}]
+\titleformat{\subsection}{\sffamily\bfseries\large\color{azul}}{\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}{\sffamily\bfseries\normalsize}{\thesubsubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{2.2em}{0.9em}
+\titlespacing*{\subsection}{0pt}{1.5em}{0.4em}
+\titlespacing*{\subsubsection}{0pt}{1.1em}{0.2em}
+
+% codigo no meio do texto
+\newcommand{\code}[1]{{\ttfamily #1}}
+
+% blocos de codigo (C++) e de saida de programa
+\lstdefinestyle{base}{basicstyle=\ttfamily\fontsize{9.3}{10.8}\selectfont, columns=fullflexible, keepspaces=true,
+  breaklines=true, breakatwhitespace=false, showstringspaces=false, tabsize=4, extendedchars=true,
+  frame=leftline, framerule=1.6pt, framesep=3mm, xleftmargin=3.6mm, aboveskip=0.7em, belowskip=0.5em}
+\lstdefinestyle{cpp}{style=base, language=C++, rulecolor=\color{azul}, backgroundcolor=\color{fundocod},
+  keywordstyle=\bfseries\color[HTML]{0B5394}, commentstyle=\itshape\color[HTML]{5E7A8A}, stringstyle=\color[HTML]{9C5700},
+  morekeywords={override,nullptr,constexpr,noexcept,size_t}}
+\lstdefinestyle{saida}{style=base, rulecolor=\color{ouro}, backgroundcolor=\color{fundosai}}
+
+% tabelas
+\newcommand{\cab}[1]{\textsf{\textbf{#1}}}
+\newenvironment{tabela}[1]{\par\smallskip\small\renewcommand{\arraystretch}{1.18}\tabularx{\linewidth}{@{}#1@{}}}{\endtabularx\par\smallskip}
+
+% caixas
+\newtcolorbox{nota}{colback=azul!4, colframe=azul!35, boxrule=0.4pt, arc=1pt, left=3mm, right=3mm, top=1.5mm, bottom=1.5mm,
+  fontupper=\small, before skip=0.8em, after skip=0.8em}
+\newtcolorbox{fonte}{blanker, breakable, borderline west={1.4pt}{0pt}{ouro}, left=3.2mm, fontupper=\small\color{black!80},
+  before skip=0.5em, after skip=0.8em}
+\newenvironment{referencias}{\small\newcommand{\refitem}{\par\hangindent=7mm\hangafter=1 }}{\par}
+
+% Figura 1: dependencias entre os nos
+\newcommand{\FiguraGrafo}{%
+\begin{center}
+\begin{tikzpicture}[x=1mm,y=1mm, font=\sffamily\footnotesize, >={Stealth[length=2mm]},
+  mc/.style={draw=azul, fill=azul!10, rounded corners=1pt, minimum width=24mm, minimum height=8mm},
+  sw/.style={draw=ouro!80!black, fill=ouro!22, rounded corners=1pt, minimum width=24mm, minimum height=9mm, align=center}]
+  \foreach \i in {0,1,2,3}{
+    \node[mc] (a\i) at (40*\i, 44) {MC\textsubscript{\i} ($T_{\i}$)};
+    \node[mc] (b\i) at (40*\i, 0)  {MC\textsubscript{\i} ($T_{\i}$)};
+  }
+  \foreach \i in {0,1,2}{
+    \node[sw] (s\i) at (40*\i+20, 22) {SW\textsubscript{\i}\\[-1pt]{\scriptsize\color{cinza}(+ TU\textsubscript{\i})}};
+  }
+  \foreach \i/\j in {0/1,1/2,2/3}{
+    \draw[->] (a\i.south) -- (s\i);
+    \draw[->] (a\j.south) -- (s\i);
+    \draw[->] (s\i) -- (b\i.north);
+    \draw[->] (s\i) -- (b\j.north);
+  }
+  \draw[->] (s0) -- (s1);
+  \draw[->] (s1) -- (s2);
+  \node[anchor=east, text=cinza] at (-14, 44) {rodada $r$};
+  \node[anchor=east, text=cinza] at (-14, 0) {rodada $r+1$};
+\end{tikzpicture}
+\end{center}
+{\small\sffamily\color{black!75}\textbf{Figura 1.} Dependências entre os nós para quatro temperaturas. Cada MC executa MCL passos de
+Metropolis; cada SW propõe a troca das réplicas do seu par e, a cada $\upsilon$ propostas, executa a atualização de temperatura (TU).
+A cadeia SW\textsubscript{0} $\to$ SW\textsubscript{1} $\to$ SW\textsubscript{2} fixa a ordem das trocas dentro da rodada.\par}
+\medskip
+}
+
+\begin{document}
+
+\begin{titlepage}
+\sffamily
+\vspace*{70mm}
+{\fontsize{32}{36}\selectfont\bfseries\color{azul} PTAPI — versão 2\par}
+\vspace{6mm}
+{\Large Alterações realizadas, origem dos novos métodos\\[2pt] e guia detalhado de funcionamento e uso\par}
+\vspace{18mm}
+{\color{cinza}
+Parallel Tempering API em C++ (modelo \textit{dataflow} para CPU)\\[3pt]
+Documento técnico da versão candidata 2.0 — novembro de 2026\\[3pt]
+Código descrito: este repositório (núcleo em \code{include/})\par}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+\section{O que é este documento}\label{s1}
+
+Este documento registra tudo o que mudou da PTAPI original (aqui chamada de v1; o núcleo dela está na pasta \code{v1/\allowbreak{}}) para a versão 2, explica como a v2 funciona por dentro e mostra, com programas completos, como usá-la. Para cada método novo é indicada a publicação de onde ele veio; quando uma regra é adaptação ou procedimento próprio desta versão, isso é dito explicitamente, para que não se atribua a um artigo o que ele não contém.
+
+A v2 foi construída sob quatro princípios:
+
+\begin{itemize}
+\item \textbf{A API continua genérica.} O núcleo não conhece o problema; um problema novo só precisa de uma estrutura de solução e de uma classe derivada de \code{Problem<S>}.
+\item \textbf{Compatibilidade de código.} Programas escritos para a v1 compilam sem alteração: o construtor de \code{PT}, \code{start()}, \code{getBestSol()}, \code{getBestPTLSolIndex()}, \code{getPTLEnd()}, \code{setTimeEnd()} e \code{setPTLStopEnd()} não mudaram.
+\item \textbf{Toda alteração é medida.} Tempo (comparação com a v1 no mesmo programa) e qualidade (média de 20 sementes) foram medidos a cada mudança; os números estão na \hyperref[s9]{Seção 9}.
+\item \textbf{Testes unitários permanentes.} A suíte de \code{tests/\allowbreak{}} tem 44 testes e passa em três modos: normal, ThreadSanitizer e AddressSanitizer + UBSan. \end{itemize}
+
+O código da v1 não foi modificado. As medições deste documento foram feitas em uma máquina de 24 núcleos lógicos com g++ 15.2 e \code{-O3}.
+
+\begin{nota}
+\textbf{Convenção.} $T$ é a temperatura e $\beta = 1/T$. As temperaturas são numeradas de $T_{0}$ (a primeira) a $T_{M-1}$ (a última); nas distribuições 1, 3 e 4 a primeira é a mais fria. $E$ é o valor da função objetivo (\code{evalSol}); a API minimiza. MCL é o comprimento de cada cadeia de Markov e PTL o número de rodadas de troca.
+\end{nota}
+
+\section{Como a API v2 funciona}\label{s2}
+
+\subsection{Os três passos}
+
+O uso da API tem os mesmos três passos da v1:
+
+\begin{enumerate}
+\item \textbf{Solução}: uma \code{struct} que herda de \code{solution}. A base traz o campo \code{double evalSol}, onde fica o custo; o restante é a codificação do problema.
+\item \textbf{Problema}: uma classe que herda de \code{Problem<S>} e implementa \code{construction()} (solução inicial avaliada), \code{neighbor()} (um vizinho) e \code{evaluate()} (o custo).
+\item \textbf{PT}: um objeto \code{PT<S>} criado com os parâmetros do algoritmo, e a chamada \code{start(\allowbreak{}threads, \&problema)}, que devolve a melhor solução. \end{enumerate}
+
+O construtor tem oito argumentos, os mesmos da v1:
+
+\begin{lstlisting}[style=cpp]
+PT<S> pt(tempMin, tempMax, replicas, MCL, PTL,
+         distribuicao, tipoDeAtualizacao, intervaloDeAtualizacao);
+\end{lstlisting}
+
+\begin{tabela}{l>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Argumento} & \cab{Significado} \\
+\midrule
+\code{tempMin}, \code{tempMax} & Primeira e última temperatura da escada. \\
+\code{replicas} & Número de temperaturas (uma réplica em cada). \\
+\code{MCL} & Movimentos que cada réplica faz entre duas propostas de troca. \\
+\code{PTL} & Número de rodadas (cada rodada: MCL movimentos por réplica e as propostas de troca). \\
+\code{distribuicao} & Distribuição inicial das temperaturas: 1 linear, 2 linear inversa, 3 exponencial, 4 progressão geométrica. \\
+\code{tipoDeAtualizacao} & Regra de atualização dinâmica das temperaturas, de 0 a 6 (\hyperref[s7]{Seção 7}). \\
+\code{intervaloDeAtualizacao} & Número de propostas de troca entre duas atualizações das temperaturas. \\
+\bottomrule
+\end{tabela}
+
+\subsection{O grafo \textit{dataflow}}
+
+A execução é descrita por um grafo de tarefas. Há três tipos de nó:
+
+\begin{itemize}
+\item \textbf{MC} (\code{NodeMCMC}): uma cadeia de Markov homogênea de MCL passos em uma temperatura. Há um nó MC por temperatura; ele guarda a réplica que está naquela temperatura.
+\item \textbf{SW} (\code{NodeSwap}): a proposta de troca entre duas temperaturas adjacentes. Há um nó SW por par.
+\item \textbf{TU} (\code{NodeTempUp}): a atualização das temperaturas de um par. Não é escalonado separadamente: é executado dentro do nó SW a que pertence, a cada \code{intervaloDeAtualizacao} propostas. \end{itemize}
+
+As arestas dizem quem espera por quem. O nó SW\textsubscript{$i$} só pode executar depois que MC\textsubscript{$i$} e MC\textsubscript{$i+1$} terminaram a cadeia da rodada, e depois que SW\textsubscript{$i-1$} executou. Os nós MC\textsubscript{$i$} da rodada seguinte ficam prontos quando as trocas que os envolvem (SW\textsubscript{$i-1$} e SW\textsubscript{$i$}) terminaram. Os nós são reutilizados a cada rodada; a figura desdobra duas rodadas para mostrar as dependências.
+
+\FiguraGrafo
+
+Essa estrutura é a mesma da tese; o que mudou na v2 é a forma de executá-la (\hyperref[s4]{Seção 4}). Com uma única réplica o grafo é um nó MC ligado a si mesmo: Metropolis simples.
+
+\subsection{Uma rodada}
+
+\textbf{Nó MC.} Para a solução corrente $s$ na temperatura $T$, repete MCL vezes: gera um vizinho avaliado $s'$, calcula $\Delta = E(s') - E(s)$ e aceita o vizinho se
+
+\[
+\Delta \le 0 \quad\text{ou}\quad u \le \exp(-\Delta/T), \qquad \text{com } u \text{ uniforme em } [0,1).
+\]
+
+Quando um movimento melhora a solução da réplica, ela é comparada com a melhor solução global, que é atualizada na hora (na v1 a melhor era coletada dos nós só no final).
+
+\textbf{Nó SW.} Para as réplicas das temperaturas $T_{i}$ e $T_{i+1}$, com custos $E_{i}$ e $E_{i+1}$, a troca é aceita com probabilidade
+
+\[
+p = \min\bigl\{1,\ \exp\bigl[(\beta_{i+1}-\beta_i)(E_{i+1}-E_i)\bigr]\bigr\}.
+\]
+
+Trocar significa trocar as soluções entre os dois nós MC (um \code{std::swap}, sem cópia); as temperaturas ficam nos nós. Junto com a solução viaja um rótulo usado para medir idas e voltas: a réplica recebe o rótulo «subindo» quando passa pela primeira temperatura e «descendo» quando passa pela última.
+
+\textbf{Fim.} A execução termina quando todas as réplicas completaram PTL rodadas ou quando um dos critérios opcionais é atingido (\hyperref[s6]{Seção 6.3}).
+
+\subsection{O \textit{pool} de threads}
+
+Os nós prontos ficam em uma única fila. Cada thread do \textit{pool} retira um nó, executa-o e avisa os sucessores; cada nó tem um contador atômico de dependências pendentes e entra na fila quando o contador chega a zero. Três decisões reduzem o custo do escalonamento:
+
+\begin{itemize}
+\item \textbf{Continuação na própria thread.} Ao terminar um nó, a thread executa ela mesma o próximo sucessor que ficou pronto, sem passar pela fila. O sucessor preferido de um SW é o SW seguinte, de modo que uma thread percorre a cadeia de trocas (que é barata) e entrega os nós MC às outras.
+\item \textbf{Espera em duas fases.} Uma thread sem trabalho gira por um número limitado de iterações (\code{PTAPI\_\allowbreak{}SPIN}, padrão 5000) e só então dorme. Na v1 as threads ociosas ficavam em espera ocupada, a 100\% de CPU, inclusive a thread que chamou \code{start()}.
+\item \textbf{Número de threads.} São criadas min(\code{thN}, réplicas) threads, porque nunca há mais nós MC prontos do que réplicas; \code{thN $\le$ 0} significa todos os núcleos. \end{itemize}
+
+O valor 5000 de \code{PTAPI\_\allowbreak{}SPIN} foi escolhido medindo de 0 a 200000 em máquina ociosa e sob carga; pode ser alterado na compilação com \code{-DPTAPI\_\allowbreak{}SPIN=n}.
+
+\subsection{Números aleatórios e reprodutibilidade}
+
+Cada nó (MC e SW) tem o seu próprio gerador \code{std::mt19937\_\allowbreak{}64}, derivado de uma única semente e do índice do nó. O código do problema obtém o gerador da réplica que está executando com \code{ptapi::rng()}, \code{ptapi::randInt(\allowbreak{}a, b)} e \code{ptapi::rand01()}. Na v1 todos os nós eram semeados com a mesma semente padrão, e os exemplos criavam um \code{std::random\_\allowbreak{}device} e um gerador novo a cada chamada de \code{neighbor()}, o que é lento e impede a repetição de uma execução.
+
+Como o grafo fixa a ordem em que os dados são lidos e escritos, uma execução que só usa os geradores da API e termina por PTL dá o mesmo resultado para qualquer número de threads. Isso vale para os tipos de atualização 0, 1, 2 e 5; os tipos 3, 4 e 6 leem estatísticas de outros pares enquanto eles executam e por isso não são garantidamente reprodutíveis (\hyperref[s7]{Seção 7}). Paradas por tempo também não são reprodutíveis, por natureza.
+
+\subsection{Onde termina a API e começa o problema}
+
+A classe do problema declara \code{evaluate} em qualquer uma de três formas; a API descobre qual em tempo de compilação, a partir do tipo do ponteiro passado a \code{start()} (por isso o ponteiro deve ser da própria classe, \code{SSP*}, e não \code{Problem<solSSP>*}):
+
+\begin{lstlisting}[style=cpp]
+S      evaluate(S sol);          // devolve a solução avaliada (pode também alterá-la)
+double evaluate(S sol);          // forma dos exemplos publicados com a v1
+double evaluate(const S& sol);   // sem cópia da solução
+\end{lstlisting}
+
+O passo da cadeia chama uma única função virtual, \code{neighborEval(\allowbreak{}const S\& atual, S\& candidata)}, cuja implementação padrão é \code{candidata = evaluate(\allowbreak{}neighbor(\allowbreak{}atual))}. Sobrescrevê-la é opcional e é o que mais acelera um problema (\hyperref[s6]{Seção 6.1}).
+
+\clearpage
+\section{Guia de uso com um exemplo completo}\label{s3}
+
+O programa abaixo resolve a partição de números: dividir 60 inteiros em dois grupos cujas somas sejam tão próximas quanto possível. Ele é o arquivo \code{docs/\allowbreak{}report/\allowbreak{}src/\allowbreak{}guia.cpp}, compilado e executado para gerar a saída mostrada. Foi escolhido um problema diferente dos exemplos da API para mostrar que só a classe do problema muda.
+
+\subsubsection*{Passos 1 e 2: solução e problema}
+
+\lstinputlisting[style=cpp,firstline=4,lastline=59]{guia.cpp}
+
+Pontos a observar:
+
+\begin{itemize}
+\item \code{construction()} devolve a solução já avaliada (\code{evalSol} preenchido).
+\item Os números aleatórios vêm de \code{ptapi::randInt}; é isso que torna a execução reprodutível com \code{setSeed()}.
+\item \code{neighbor()} e \code{evaluate()} bastam para a API funcionar. \code{neighborEval()} é a versão rápida do mesmo passo: reaproveita a memória de \code{cand} e calcula o custo a partir do custo atual, em tempo constante. A solução guarda o dado auxiliar \code{diff} exatamente para permitir essa avaliação incremental.
+\item Na entrada de \code{neighborEval}, \code{cand} é uma solução válida de conteúdo qualquer (em geral a solução rejeitada no passo anterior); por isso todos os seus campos devem ser escritos. \end{itemize}
+
+\subsubsection*{Passo 3: o PT}
+
+\lstinputlisting[style=cpp,firstline=61,lastline=76]{guia.cpp}
+
+Compilação e execução (C++17 ou mais novo; a API é só de cabeçalhos):
+
+\begin{lstlisting}[style=saida]
+$ g++ guia.cpp -std=c++17 -O3 -pthread -o guia
+$ ./guia
+melhor diferenca: 1 (rodada 1411 de 2000, 97.8 ms de 138.2 ms)
+12800000 avaliacoes em 16 threads, semente 42
+idas e voltas: 12   barreira: 5.96
+escada final : 10 22 46 100 215 464 1000 2154 4642 10000 21544 46416 100000 215443 464159 1000000
+taxa de troca: 0.40 0.47 0.51 0.59 0.65 0.71 0.62 0.66 0.62 0.63 0.65 0.61 0.62 0.64 0.65
+\end{lstlisting}
+
+\subsubsection*{Lendo a saída}
+
+\begin{itemize}
+\item \textbf{Melhor solução}: diferença 1 entre os grupos, encontrada na rodada 1411. As 2000 rodadas de 16 réplicas com MCL 400 somam 12,8 milhões de avaliações em 138 ms.
+\item \textbf{Taxa de troca}: há um valor por par de temperaturas adjacentes. Taxas entre 40\% e 71\% indicam uma escada mais densa que o necessário: 16 réplicas são mais do que o intervalo de 10 a $10^{6}$ pede neste problema.
+\item \textbf{Barreira}: a soma das taxas de rejeição das trocas, 5,96 (\hyperref[s6]{Seção 6.7}).
+\item \textbf{Idas e voltas}: 12 réplicas foram da primeira temperatura à última e voltaram. \end{itemize}
+
+\subsubsection*{Deixando a API ajustar a escada}
+
+Trocando apenas o sétimo argumento do construtor de 0 para 5 (aproximação estocástica, \hyperref[s7]{Seção 7}), a mesma execução termina com esta escada:
+
+\begin{lstlisting}[style=saida]
+melhor diferenca: 1 (rodada 71 de 2000, 5.6 ms de 163.1 ms)
+idas e voltas: 10   barreira: 4.97
+escada final : 10 19 118 1105 7668 53993 414053 1000000 1000000 1000000 1000000 1000000 ...
+taxa de troca: 0.33 0.30 0.28 0.27 0.26 0.24 0.55 0.89 0.95 0.99 1.00 1.00 1.00 0.99 1.00
+\end{lstlisting}
+
+A regra espaçou as temperaturas até as taxas ficarem perto de 23\% e, com isso, a escada chegou à temperatura máxima na oitava réplica; as outras oito ficaram empilhadas no limite. Essa é a leitura prática do resultado: para este problema e este intervalo, cerca de oito réplicas bastam. Os dois resultados (tipo 0 e tipo 5) repetem-se exatamente em outra execução com a mesma semente.
+
+\section{Alterações internas e desempenho}\label{s4}
+
+O algoritmo e o grafo são os da v1. O que mudou foi a implementação do escalonamento e do passo da cadeia:
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.22\linewidth}>{\raggedright\arraybackslash}p{0.36\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Tema} & \cab{v1} & \cab{v2} \\
+\midrule
+Threads ociosas & Espera ocupada (100\% de CPU), inclusive a thread que chamou \code{start()}. & Giram por alguns microssegundos e depois dormem. \\
+Número de threads & Sempre \code{thN}. & min(\code{thN}, réplicas); \code{thN $\le$ 0} usa todos os núcleos. \\
+Dependências dos nós & Mutex e vetor de marcas percorrido a cada notificação. & Um contador atômico por nó. \\
+Filas & Uma fila com mutex por thread, percorridas em laço. & Uma fila; a thread executa ela mesma o próximo nó pronto. \\
+Cópias por passo MC & 3 a 4 cópias profundas da solução. & 1 cópia (nenhuma com \code{neighborEval}). \\
+Troca de réplicas & 3 a 4 cópias profundas. & \code{std::swap}. \\
+Melhor solução & Coletada dos nós ao final. & Global, atualizada quando é encontrada. \\
+Números aleatórios & Todos os nós com a mesma semente padrão. & Um gerador por nó, derivado de uma semente. \\
+Memória & Nós e \textit{pool} nunca liberados. & Liberados ao fim de \code{start()}. \\
+Exceções do problema & Encerravam o programa. & Param a execução e são relançadas por \code{start()}. \\
+\bottomrule
+\end{tabela}
+
+\subsection*{Tempo medido}
+
+O programa \code{bench/\allowbreak{}bench.cpp} usa só a interface comum às duas versões e é compilado uma vez com cada uma. A tabela traz o tempo de parede em máquina ociosa (menor é melhor). «TSP» é um problema sintético de avaliação barata, que expõe o custo da própria API; «SD» é o problema real da pasta \code{v1/\allowbreak{}SD/\allowbreak{}}, de avaliação cara.
+
+\begin{tabela}{>{\raggedright\arraybackslash}Xrrr}
+\toprule
+\cab{Problema [réplicas, MCL, PTL, threads]} & \cab{v1 (s)} & \cab{v2 (s)} & \cab{v2 / v1} \\
+\midrule
+TSP 100 [8, 500, 2000, 8] & 0,702 & 0,604 & 0,86 \\
+TSP 100 [8, 500, 2000, 24] & 0,814 & 0,596 & 0,73 \\
+TSP 100 [30, 500, 500, 24] & 0,323 & 0,276 & 0,85 \\
+TSP 100 [16, 20, 20000, 16] & 0,507 & 0,471 & 0,93 \\
+SD [8, 300, 60, 8] & 3,76 & 3,79 & 1,01 \\
+SD [8, 300, 60, 24] & 4,60 & 3,99 & 0,87 \\
+SD [30, 300, 16, 24] & 1,76 & 1,64 & 0,93 \\
+\bottomrule
+\end{tabela}
+
+No caso SD [8, 300, 60, 8] o tempo de parede é igual, mas o tempo de CPU caiu de 33,8 s para 25,9 s: a diferença é a espera ocupada que deixou de existir. As quatro linhas de TSP foram medidas com a versão atual, depois de todas as alterações descritas neste documento (médias de 6 a 8 execuções intercaladas); as de SD foram medidas antes da inclusão de checkpoint, movimentos, esquema de troca e calibração e não foram repetidas. Nenhuma das funções acrescentadas depois da primeira medição alterou o laço das cadeias, e a regra do projeto é que a v2 não pode ser mais lenta que a v1: o benchmark é repetido a cada bloco de alterações.
+
+Esses números usam a interface da v1 (\code{neighbor} + \code{evaluate}). O ganho maior está em \code{neighborEval}, que depende do problema: no TSP de 200 cidades a mesma busca, com a mesma semente e o mesmo resultado, passou de 2,6–2,9 para 13,2 milhões de avaliações por segundo (\hyperref[s6]{Seção 6.1}).
+
+\section{Comportamentos diferentes da v1}\label{s5}
+
+O código da v1 compila sem alteração, mas alguns resultados numéricos mudam. As diferenças são as seguintes; \code{setV1Compatibility(\allowbreak{}true)} restaura as três primeiras, para reproduzir resultados já publicados.
+
+\begin{itemize}
+\item \textbf{Critério de troca com objetivo real.} A v1 convertia a energia das réplicas para \code{int} antes do teste de troca (e guardava o melhor valor como \code{int}). A v2 usa \code{double}. Nada muda para objetivos inteiros.
+\item \textbf{Taxa de troca usada pelo tipo 1 (23\%).} A v1 dividia as trocas aceitas desde a última atualização pelo número total de rodadas; a v2 divide pelo tamanho da janela, como descrito na tese.
+\item \textbf{Regras dos tipos 1 e 2.} Na v2 elas mantêm a primeira e a última temperatura e a escada ordenada (\hyperref[s7]{Seção 7}). Na v1 o tipo 1 só aproximava temperaturas, de modo que a escada descia e a temperatura máxima se perdia; o tipo 2 aceitava qualquer valor positivo.
+\item \textbf{Tipo 3.} A regra é a da tese, sem alteração; apenas os valores compartilhados entre pares passaram a ser atômicos (havia uma condição de corrida apontada pelo ThreadSanitizer).
+\item \textbf{Rótulos de ida e volta.} São guardados pela API. Os campos \code{Nup}/\code{Ndown} continuam em \code{solution} só para que o código antigo compile; são ignorados.
+\item \textbf{Limite de tempo.} É verificado pela thread que chamou \code{start()}; os nós MC param no passo seguinte, e não depois de mais uma ou duas rodadas.
+\item \textbf{Parâmetros inválidos} (distribuição, tipo de atualização, zero réplicas) lançam \code{std::invalid\_\allowbreak{}argument}. Uma réplica é aceita.
+\item \code{start()} pode ser chamado mais de uma vez no mesmo objeto, e os cabeçalhos podem ser incluídos em mais de um \code{.cpp}.
+\item \code{using namespace std;} continua exportado por \code{PT.h}, por compatibilidade; \code{-DPTAPI\_\allowbreak{}NO\_\allowbreak{}USING\_\allowbreak{}NAMESPACE\_\allowbreak{}STD} desliga. \end{itemize}
+
+O efeito da regra antiga do tipo 1 aparece no exemplo \code{exampleV1Compatibility} (escada geométrica de 1 a 60, 12 réplicas, 2000 rodadas):
+
+\begin{lstlisting}[style=saida]
+tipo 1, regra da v2:  escada final  1.00 1.17 1.20 1.88 2.16 3.44 6.28 9.19 13.95 21.61 41.16 60.00
+tipo 1, regra da v1:  escada final  1.00 1.02 1.00 0.97 0.89 0.83 0.81 0.79  0.75  0.62  0.53  0.52
+\end{lstlisting}
+
+\section{Novas funções}\label{s6}
+
+Todas são opcionais. As de configuração são chamadas antes de \code{start()}; as de resultado descrevem o último \code{start()}. Para cada grupo há um programa curto em \code{example/\allowbreak{}functions/\allowbreak{}}, sobre o mesmo problema (TSP euclidiano aleatório com movimento 2-opt, em \code{tsp.h}); as saídas reproduzidas abaixo são desses programas.
+
+\subsection{Avaliação e passo da cadeia}
+
+\begin{lstlisting}[style=cpp]
+virtual void neighborEval(const S& atual, S& candidata);   // em Problem<S>
+\end{lstlisting}
+
+Escreve em \code{candidata} um vizinho avaliado de \code{atual}. A implementação padrão chama \code{neighbor()} e \code{evaluate()}. Sobrescrevê-la permite (a) reaproveitar a memória já alocada em \code{candidata}, eliminando as cópias, e (b) calcular o custo de forma incremental. No TSP com 2-opt, por exemplo, o custo novo sai de quatro distâncias:
+
+\begin{lstlisting}[style=cpp]
+void neighborEval(const solTSP& cur, solTSP& cand){
+    int a, b;
+    do{ a = ptapi::randInt(0, n-1); b = ptapi::randInt(0, n-1); }while(a == b);
+    if(a > b) std::swap(a, b);
+
+    cand.sol = cur.sol;                                   // reaproveita a memória de 'cand'
+    std::reverse(cand.sol.begin()+a, cand.sol.begin()+b+1);
+
+    if(a == 0 && b == n-1){ cand.evalSol = cur.evalSol; return; }
+    int pa = cur.sol[(a+n-1)%n], ca = cur.sol[a], cb = cur.sol[b], nb = cur.sol[(b+1)%n];
+    cand.evalSol = cur.evalSol - dist(pa,ca) - dist(cb,nb) + dist(pa,cb) + dist(ca,nb);
+}
+\end{lstlisting}
+
+Saída de \code{exampleEvaluate} (200 cidades, mesma semente nas quatro execuções):
+
+\begin{lstlisting}[style=saida]
+S evaluate(S)                    best  11596     705.6 ms     2.6 million evaluations/s
+double evaluate(S)               best  11596     628.5 ms     2.9 million evaluations/s
+double evaluate(const S&)        best  11596     696.6 ms     2.6 million evaluations/s
+neighborEval() with delta        best  11596     136.1 ms    13.2 million evaluations/s
+the four forms reached the same solution
+\end{lstlisting}
+
+Se a classe sobrescreve \code{neighborEval} e não são dadas soluções iniciais, \code{evaluate} nem precisa existir.
+
+\subsection{Semente}
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.36\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Função} & \cab{Efeito} \\
+\midrule
+\code{setSeed(\allowbreak{}unsigned long long)} & Define a semente da execução. \\
+\code{getSeed()} & Semente usada no último \code{start()}. Sem \code{setSeed} a API sorteia uma; lê-la permite repetir depois uma execução interessante. \\
+\code{ptapi::rng()}, \code{ptapi::randInt(\allowbreak{}a, b)}, \code{ptapi::rand01()} & Gerador da réplica em execução, inteiro uniforme em [a, b] e real uniforme em [0, 1), para uso dentro da classe do problema. \\
+\bottomrule
+\end{tabela}
+
+\begin{lstlisting}[style=saida]
+seed 42   1 thread: 7518   4 threads: 7518   all cores (12): 7518
+seed 43   7535
+drawn seed 8806199900061321338   7552   repeated: 7552
+\end{lstlisting}
+
+\subsection{Critérios de parada}
+
+O PTL do construtor é sempre um limite. Os demais são opcionais e podem ser combinados; o primeiro que for atingido encerra a execução.
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.36\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Função} & \cab{Efeito} \\
+\midrule
+\code{setTimeLimit(\allowbreak{}double segundos)} & Limite de tempo com fração de segundo (\code{setTimeEnd(\allowbreak{}int)} da v1 continua aceito). \\
+\code{setTargetValue(\allowbreak{}double)} & Para quando a melhor solução for menor ou igual ao alvo. \\
+\code{setPTLStopEnd(\allowbreak{}float fração)} & Da v1: para depois dessa fração do PTL sem nova melhor solução. \\
+\code{setOnImprove(\allowbreak{}f)} & \code{f(\allowbreak{}const S\& sol, int rodada, double ms)} é chamada a cada nova melhor solução, de uma thread de trabalho, uma chamada por vez. \\
+\code{requestStop()} & Encerra um \code{start()} em andamento; pode ser chamada de outra thread ou de dentro de \code{setOnImprove}. \\
+\code{setStagnationRounds(int)} & Para depois desse número de rodadas sem nova melhor solução (número absoluto, e não fração do PTL). \\
+\code{setStagnationTime(double segundos)} & Para depois desse tempo sem nova melhor solução. \\
+\code{setLowerBound(limite, folga)} & Para quando a melhor solução estiver a \code{folga} (relativa) de um limite inferior conhecido: melhor $\le$ limite $+$ folga $\times$ |limite|. \\
+\code{setStopCondition(f)} & Qualquer outra regra: \code{f(const PTStatus\&)} é chamada ao fim de cada rodada e encerra a execução quando devolve \code{true}. \code{PTStatus} traz \code{round}, \code{elapsedMs}, \code{bestValue}, \code{bestRound} e \code{bestMs}. \\
+\code{getStopReason()}, \code{getStopReasonName()} & Por que a execução terminou: PTL, tempo, alvo, estagnação, pedido do usuário, condição ou erro. \\
+\bottomrule
+\end{tabela}
+
+\begin{lstlisting}[style=cpp]
+PT<solTSP> algo(1.0f, 60.0f, 12, 200, 2000000000, 4, 0, 50);   // PTL "sem limite"
+algo.setTimeLimit(10.0);                                       // rede de segurança
+algo.setTargetValue(9000.0);                                   // o que realmente para
+algo.setOnImprove([&](const solTSP& sol, int rodada, double ms){
+    printf("novo melhor %.0f na rodada %d (%.1f ms)\n", sol.evalSol, rodada, ms);
+});
+solTSP s = algo.start(0, &prob);
+\end{lstlisting}
+
+\begin{lstlisting}[style=saida]
+time limit of 0.25 s         best   7468   stopped at round    1763     250.9 ms
+target value of 9000         best   8999   stopped at round      44       6.1 ms
+10% of PTL without improving best   7455   stopped at round    3246     509.9 ms
+stopped by another thread    best   7459   stopped at round    1445     151.4 ms
+\end{lstlisting}
+
+Um critério escrito pelo usuário e, em seguida, a saída de \code{exampleStop} para os gatilhos novos; a última coluna é o motivo do término:
+
+\begin{lstlisting}[style=cpp]
+// para quando a busca passou, sem melhorar, três vezes o tempo que levou para achar a melhor atual
+algo.setStopCondition([](const PTStatus& st){
+    return st.elapsedMs > 50.0 && (st.elapsedMs - st.bestMs) > 3.0*st.bestMs;
+});
+\end{lstlisting}
+
+\begin{lstlisting}[style=saida]
+800 rounds without improving   best   7533   round    1969      58.8 ms   stop: stagnation
+0.15 s without improving       best   7386   round   13109     370.2 ms   stop: stagnation
+within 5% of the bound 7300    best   7645   round     214       6.4 ms   stop: target
+user-defined condition         best   7374   round   40358    1166.7 ms   stop: condition
+\end{lstlisting}
+
+\subsection{Escada de temperaturas e soluções iniciais}
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.36\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Função} & \cab{Efeito} \\
+\midrule
+\code{setTemperatures(\allowbreak{}vector<double>)} & Escada definida pelo usuário: quaisquer valores e qualquer número de réplicas (substitui as temperaturas e o número de réplicas do construtor). \\
+\code{getInitialTemperatures()} & Escada inicial. \\
+\code{getTemperatures()} & Escada final, depois das atualizações dinâmicas. \\
+\code{setInitialSolutions(\allowbreak{}vector<S>)} & Partida a quente: as réplicas começam de soluções dadas, em vez de \code{construction()}. A API avalia as soluções; se houver menos soluções que réplicas, elas são atribuídas ciclicamente. \\
+\code{getReplicas()} & Solução final de cada temperatura; serve de entrada para uma segunda etapa. \\
+\bottomrule
+\end{tabela}
+
+As quatro distribuições do construtor, de 1 a 60 com 8 réplicas (a distribuição 2 vai da máxima para a mínima, como na v1; as outras são crescentes):
+
+\begin{lstlisting}[style=saida]
+1 linear            1.00    9.43   17.86   26.29   34.71   43.14   51.57   60.00
+2 inverse linear   60.00    6.36    3.36    2.28    1.73    1.39    1.16    1.00
+3 exponential       1.00    1.79    3.22    5.78   10.38   18.63   33.43   60.00
+4 geometric         1.00    1.79    3.22    5.78   10.38   18.63   33.43   60.00
+\end{lstlisting}
+
+Partida a quente no TSP de 200 cidades, em uma execução curta (\code{exampleInitialSolutions}):
+
+\begin{lstlisting}[style=saida]
+nearest neighbour tour (city 0)   13908
+random start                      13651   first best at 106246
+start from nearest neighbour      11443   first best at 13908
+second stage from its replicas    11170
+\end{lstlisting}
+
+\textbf{Heurística construtiva dentro do problema.} A função \code{constructionReplica(indice, total)} pode ser sobrescrita na classe do problema; ela constrói a solução de uma réplica sabendo a sua posição na escada (0 é a primeira temperatura). A implementação padrão chama \code{construction()}. Assim a heurística faz parte do problema e nada precisa ser preparado no programa principal:
+
+\begin{lstlisting}[style=cpp]
+// metade fria da escada: vizinho mais próximo, uma cidade inicial por réplica;
+// metade quente: soluções aleatórias, que mantêm a diversidade
+solTSP constructionReplica(int index, int count) override {
+    if(index >= count/2) return construction();
+    solTSP s = nearestNeighbour(index % n);
+    s.evalSol = evaluate(s);                 // deve devolver a solução avaliada
+    return s;
+}
+\end{lstlisting}
+
+Com \code{setParallelConstruction(true)} as réplicas são construídas por várias threads ao mesmo tempo, o que compensa quando a heurística é cara: no teste da suíte, 8 réplicas com construção de 30 ms cada levaram 241 ms em sequência e 30 ms em paralelo. As soluções construídas não dependem das threads, porque cada réplica tem o seu gerador aleatório; o código de construção precisa apenas ser seguro para chamadas simultâneas, como \code{neighbor()} já é. O padrão continua sendo a construção em sequência, como na v1.
+
+\subsection{Vários movimentos com probabilidades}
+
+Um problema com mais de um tipo de movimento registra um peso para cada um e pergunta à API qual aplicar. Depois da execução, a API informa quantas vezes cada movimento foi proposto e aceito.
+
+\begin{lstlisting}[style=cpp]
+class TSPMoves: public Problem<solTSP>{
+  public:
+    TSPMoves(int n_): base(n_), n(n_){
+        setMoveProbabilities({0.6, 0.1, 0.3});       // pesos; a API normaliza
+    }
+    solTSP neighbor(solTSP s){
+        int a, b;
+        do{ a = ptapi::randInt(0, n-1); b = ptapi::randInt(0, n-1); }while(a == b);
+        switch(chooseMove()){                        // sorteia o movimento
+            case 0:  /* 2-opt     */ if(a > b) std::swap(a, b);
+                                     std::reverse(s.sol.begin()+a, s.sol.begin()+b+1); break;
+            case 1:  /* troca     */ std::swap(s.sol[a], s.sol[b]); break;
+            default: /* inserção  */ { int c = s.sol[a]; s.sol.erase(s.sol.begin()+a);
+                                       s.sol.insert(s.sol.begin()+b, c); }
+        }
+        return s;
+    }
+    // ...
+};
+
+for(const PTMoveStat& m : algo.getMoveStatistics())   // {proposed, accepted}, um por movimento
+    printf("%lld propostos, %lld aceitos\n", m.proposed, m.accepted);
+\end{lstlisting}
+
+\begin{lstlisting}[style=saida]
+60% 2-opt, 10% swap, 30% insertion: best 7510
+   2-opt      probability 0.60   proposed   1440556   accepted    17578 ( 1.2%)
+   swap       probability 0.10   proposed    239866   accepted     1937 ( 0.8%)
+   insertion  probability 0.30   proposed    719578   accepted     7418 ( 1.0%)
+\end{lstlisting}
+
+As contagens somam todas as temperaturas. Se a classe não registra movimentos, o laço das cadeias é o mesmo de antes e nada é contado. As probabilidades são fixas durante a execução; a API não as adapta.
+
+\subsection{Checkpoint e retomada}
+
+O arquivo de checkpoint guarda as temperaturas, a solução de cada réplica, a melhor solução, e as rodadas e o tempo já usados. A API escreve os valores da função objetivo; o usuário fornece duas funções, uma que escreve e outra que lê o restante de uma solução.
+
+\begin{lstlisting}[style=cpp]
+auto escreve = [](std::ostream& out, const solTSP& s){ for(int c : s.sol) out << c << ' '; };
+auto le      = [n](std::istream& in, solTSP& s){ s.sol.resize(n); for(int& c : s.sol) in >> c; };
+
+PT<solTSP> algo(1.0f, 60.0f, 12, 300, 3000, 4, 0, 50);
+algo.loadCheckpoint("job.ckpt", le);           // continua a execução salva, se o arquivo existir
+algo.setCheckpoint("job.ckpt", escreve, 60.0); // salva a cada minuto e ao final
+solTSP melhor = algo.start(0, &prob);
+\end{lstlisting}
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.40\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Função} & \cab{Efeito} \\
+\midrule
+\code{setCheckpoint(\allowbreak{}arquivo, escritor, aCadaSegundos)} & Salva o estado ao fim de \code{start()} e, se o intervalo for maior que zero, periodicamente. \\
+\code{loadCheckpoint(\allowbreak{}arquivo, leitor)} & O próximo \code{start()} continua a execução salva. Devolve \code{false} se o arquivo não existe e lança \code{std::runtime\_\allowbreak{}error} se ele está danificado. \\
+\code{saveCheckpoint(\allowbreak{}arquivo, escritor)} & Salva, sob demanda, o estado do último \code{start()}. \\
+\bottomrule
+\end{tabela}
+
+Uma execução retomada cumpre o PTL e o tempo restantes. A cópia periódica é tirada por cada réplica ao fim da sua rodada, sem parar as outras; o arquivo é escrito com outro nome e só substitui o anterior quando está completo, de modo que uma queda durante a escrita não destrói o checkpoint anterior.
+
+\begin{lstlisting}[style=saida]
+new run:  rounds  912 of 3000   best  11253   time of the job so far   150.3 ms
+resumed:  rounds 3000 of 3000   best  11049   time of the job so far   606.7 ms
+\end{lstlisting}
+
+\begin{nota}
+\textbf{O que a retomada não é.} É uma continuação da busca, não uma repetição bit a bit: os geradores aleatórios e as estatísticas das atualizações dinâmicas recomeçam, e \code{getConvergence()} lista apenas as melhorias encontradas depois da retomada. A cópia periódica pode ter até um intervalo de idade.
+\end{nota}
+
+\subsection{Esquema de troca e diagnósticos da escada}
+
+\begin{lstlisting}[style=cpp]
+algo.setSwapScheme(PT_SWAP_SEQUENTIAL);   // padrão, como na v1
+algo.setSwapScheme(PT_SWAP_EVEN_ODD);     // pares alternados
+\end{lstlisting}
+
+\begin{itemize}
+\item \textbf{Sequencial}: em cada rodada todos os pares propõem troca, do primeiro ao último.
+\item \textbf{Par-ímpar} (\textit{deterministic even-odd}): os pares (0,1), (2,3), $\dots$ propõem em uma rodada e os pares (1,2), (3,4), $\dots$ na seguinte. \end{itemize}
+
+\begin{fonte}
+\textbf{Fonte.} O esquema par-ímpar é o de Okabe et al. (2001); Syed et al. (2019) mostram que, aplicado de forma determinística, ele torna o PT não reversível e analisam o ganho em idas e voltas.
+\end{fonte}
+
+Dois diagnósticos acompanham qualquer execução:
+
+\begin{itemize}
+\item \code{getRoundTrips()}: número de réplicas que foram da primeira temperatura à última e voltaram. É o que leva uma solução encontrada em alta temperatura até as baixas.
+\item \code{getCommunicationBarrier()}: soma das taxas de rejeição das trocas, $\sum_i (1 - \mathrm{taxa}_i)$. Mede o quanto o intervalo de temperaturas é difícil de atravessar. \end{itemize}
+
+\begin{fonte}
+\textbf{Fonte.} A ida e volta como medida da escada é de Katzgraber et al. (2006); a barreira de comunicação global é definida por Syed et al. (2019).
+\end{fonte}
+
+\begin{lstlisting}[style=saida]
+replicas  scheme       best   round trips   barrier   exchange rates (min..max)
+       6  sequential   7499             1      4.91   0.00..0.03
+      12  sequential   7472             4      9.42   0.01..0.32
+      24  sequential   7438             5     13.11   0.18..0.64
+      48  sequential   7400             4     14.96   0.36..0.81
+      48  even-odd     7393             4     14.88   0.40..0.82
+\end{lstlisting}
+
+Com 6 réplicas quase toda troca é rejeitada: a barreira está no teto (réplicas $-$ 1). Ela cresce cada vez menos com o número de réplicas (13,1 com 24; 15,0 com 48; 16,3 com 96): quando para de crescer, mais réplicas deixam de ajudar. Nos problemas testados o esquema par-ímpar não foi melhor que o sequencial (\hyperref[s9]{Seção 9}), por isso o padrão continua sendo o da v1.
+
+\subsection{Resultados da execução}
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.40\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Função} & \cab{Devolve} \\
+\midrule
+\code{getEvaluations()} & Número de vizinhos avaliados. \\
+\code{getElapsedMs()}, \code{getTimeToBestMs()} & Tempo total e tempo até a melhor solução. \\
+\code{getConvergence()} & Cada nova melhor solução: \code{\{timeMs, ptl, value\}} (a curva de convergência). \\
+\code{getMoveAcceptanceRates()} & Taxa de aceitação dos movimentos, uma por temperatura. \\
+\code{getSwapAcceptanceRates()} & Taxa de aceitação das trocas, uma por par adjacente. \\
+\code{getReplicas()} & Solução final de cada temperatura. \\
+\code{getThreadsUsed()} & Threads efetivamente criadas. \\
+\code{getMoveStatistics()} & \code{\{proposed, accepted\}} de cada movimento registrado. \\
+\code{getRoundTrips()}, \code{getCommunicationBarrier()} & Diagnósticos da Seção 6.7. \\
+\code{getStopReason()} & Motivo do término (Seção 6.3). \\
+\code{getTiming()} & Tempo de cada componente (Seção 6.9). \\
+\bottomrule
+\end{tabela}
+
+\begin{lstlisting}[style=saida]
+best 7563, found at round 177 of 1000, after 14.1 ms of 74.5 ms
+2000000 evaluations (26.9 million/s) with 10 threads, seed 8
+
+temperature           1.00     1.58     2.48     3.91     6.17     9.72    15.33    24.15    38.07    60.00
+accepted moves       0.002    0.003    0.003    0.003    0.004    0.005    0.009    0.015    0.027    0.051
+final replica         7563     7567     7589     7638     7678     7817     8053     8166     8907    11744
+accepted exchanges        0.201    0.115    0.048    0.207    0.133    0.124    0.038    0.017    0.007
+\end{lstlisting}
+
+\subsection{Tempo de cada componente}
+
+Depois de \code{setProfiling(true)}, \code{getTiming()} informa para onde foi o tempo da execução: as cadeias de Markov (o código do problema, \code{neighbor}/\code{evaluate}, mais o teste de aceitação), as propostas de troca, as atualizações de temperatura e as threads à espera de um nó pronto. Esses quatro tempos são somados sobre as threads e por isso fecham em threads $\times$ (tempo total $-$ construção). O tempo total e o da construção inicial são sempre medidos. A medição custa duas leituras de relógio por execução de nó, e não por movimento, e vem desligada.
+
+\begin{lstlisting}[style=saida]
+long chains (8 replicas, MCL 2000, 8 threads): best 7510 in 62.0 ms
+   chains (problem code)    369.39 thread-ms   74.5%
+   exchanges                  0.25 thread-ms    0.0%
+   temperature updates        0.08 thread-ms    0.0%
+   waiting + scheduling     126.10 thread-ms   25.4%
+
+short chains (8 replicas, MCL 20, 8 threads): best 7466 in 202.3 ms
+   chains (problem code)    369.42 thread-ms   22.8%
+   exchanges                 24.40 thread-ms    1.5%
+   temperature updates        1.20 thread-ms    0.1%
+   waiting + scheduling    1223.38 thread-ms   75.6%
+\end{lstlisting}
+
+As duas execuções fazem o mesmo número de avaliações (o tempo nas cadeias é igual), mas com cadeias curtas as threads se encontram nas trocas cem vezes mais e passam três quartos do tempo esperando umas pelas outras: o MCL é também um parâmetro de eficiência paralela. A leitura prática é esta: se o tempo está nas cadeias, o que vale otimizar é o código do problema (\code{neighborEval}); se está na espera, aumentar o MCL ou usar menos threads.
+
+\subsection{Gerenciamento de experimentos}
+
+O experimento típico de um artigo (R execuções por instância, um arquivo por execução e um resumo com melhor, média, mediana e desvio-padrão) está no cabeçalho opcional \code{Experiment.h}. O usuário escreve apenas a função que faz \textit{uma} execução; a API cuida do laço, das sementes, dos arquivos e das estatísticas.
+
+\begin{lstlisting}[style=cpp]
+#include "include/Experiment.h"
+
+PTExperiment exp("resultados");           // pasta de saída
+exp.setRuns(30);                          // execuções por instância
+exp.setFirstSeed(1);                      // a execução k usa a semente 1 + k
+exp.addInstance("instancias/a.txt");      // o que a função abaixo recebe
+exp.setReference(1234.0);                 // opcional: melhor valor conhecido ou limite inferior
+exp.addInstancesFromFile("lista.txt");    // ou uma linha "caminho [referência]" por instância
+
+exp.run([](const std::string& instancia, unsigned long long semente){
+    MeuProblema prob(instancia);
+    PT<minhaSolucao> algo(1.0, 60.0, 16, 500, 1000, 4, 0, 50);
+    algo.setSeed(semente);
+    minhaSolucao melhor = algo.start(0, &prob);
+    return ptResult(algo, melhor);        // PTRunResult: tudo o que a API mediu
+});
+\end{lstlisting}
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.26\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Arquivo} & \cab{Conteúdo} \\
+\midrule
+\code{<instância>/run\_<k>.txt} & Uma execução: semente, valor, tempos, rodadas, avaliações, motivo do término, escada final, taxas de aceitação, curva de convergência e, se o usuário preencher \code{PTRunResult::solution}, a solução. \\
+\code{runs.csv} & Uma linha por execução. \\
+\code{summary.csv} & Uma linha por instância: execuções, melhor, média, mediana, desvio-padrão (amostral), pior, tempo médio, tempo médio até a melhor, avaliações e, havendo referência, os desvios percentuais e o número de execuções que a atingiram. \\
+\code{summary.txt} & A mesma tabela, alinhada, para ler no terminal. \\
+\code{summary.tex} & A mesma tabela em \LaTeX{} (\code{booktabs}). \\
+\code{<instância>/\allowbreak{}convergence.csv} & Convergência da instância sobre as suas execuções, por rodada: em cada ponto de uma grade (100 pontos, mais próximos no início; \code{setCurvePoints}), o melhor, a mediana, a média e o pior dos valores que as execuções tinham até ali. \\
+\code{<instância>/\allowbreak{}convergence\_time.csv} & O mesmo por tempo, em segundos. \\
+\code{<instância>/\allowbreak{}time\_to\_target.csv} & Instâncias com referência: o tempo que cada execução levou para atingi-la, em ordem crescente, com a probabilidade empírica $(i - 0{,}5)/R$ de já tê-la atingido. \\
+\code{figures.gp}, \code{figures.tex} & Roteiros que desenham os três arquivos anteriores, com gnuplot ou com \LaTeX{} e pgfplots. \\
+\bottomrule
+\end{tabela}
+
+Saída de \code{exampleExperiment} (três instâncias, dez execuções cada; as colunas do pior valor e do tempo até a melhor solução foram omitidas aqui). Na primeira instância a referência é um valor-alvo, e não o melhor conhecido; seis das dez execuções o atingiram.
+
+\begin{lstlisting}[style=saida]
+instance  runs       best       mean     median       sd  time(s)  gap best%  gap mean%  hits
+tsp60       10    5976.00    6020.30    6017.50    36.35     0.01      -0.73       0.00     6
+tsp100      10    7435.00    7601.50    7618.50    91.81     0.01       1.16       3.42     0
+tsp150      10    9708.00    9837.80    9824.00    82.13     0.01          -          -     -
+
+tsp100/convergence.csv:
+   round,runs,best,median,mean,worst
+   0,10,31731,33165,33219.2,34412
+   1,10,23830,26341,26201.9,27360
+tsp60/time_to_target.csv:
+   seconds,probability,run
+   0.001684818,0.05,9
+   0.002932627,0.15,3
+tsp60: 6 of 10 executions reached 6020, in 0.0048 s on average
+\end{lstlisting}
+
+\textbf{Curvas e tempo até o alvo.} Os três arquivos por instância são CSV simples, feitos para serem desenhados, e a pasta recebe dois roteiros que os desenham: \code{figures.gp} (\code{gnuplot figures.gp} grava \code{convergence.pdf} e \code{time\_to\_target.pdf} em cada instância) e \code{figures.tex} (\code{lualatex figures.tex} grava \code{figures.pdf}, uma figura por página, com pgfplots; cada \code{tikzpicture} pode ser copiado para um artigo). A API não os executa. A figura de convergência traz a mediana, a média e a faixa entre a melhor e a pior execução, com as rodadas em escala logarítmica. As curvas vêm da lista de novas melhores soluções de cada execução (\code{getConvergence}), e por isso os primeiros pontos podem mudar um pouco entre duas execuções com a mesma semente: a ordem em que as réplicas registram as primeiras soluções depende das threads. O arquivo \code{time\_to\_target.csv} contém os dados do gráfico de tempo até o alvo (\textit{time-to-target plot}) de Aiex, Resende e Ribeiro (2007); com a referência usada como alvo, \code{summary.csv} traz também quantas execuções o atingiram e o tempo médio que levaram.
+
+\textbf{Colunas do \code{runs.csv}.} O padrão é \code{instance}, \code{run}, \code{seed}, \code{value}, \code{seconds}, \code{seconds\_to\_best}, \code{rounds} (o PTL em que a execução terminou), \code{best\_round}, \code{evaluations}, \code{threads}, \code{stop} e \code{round\_trips}. A lista pode ser alterada: \code{addCsvColumns} acrescenta colunas e \code{setCsvColumns} substitui a lista inteira, na ordem dada. Além das do padrão, a API sabe preencher \code{path}, \code{evaluations\_per\_second}, \code{improvements}, \code{replicas}, \code{temp\_first}, \code{temp\_last}, \code{temperatures}, \code{temperatures\_initial}, \code{moves\_proposed}, \code{moves\_accepted}, \code{moves\_rate} (um valor por movimento registrado), \code{seconds\_to\_reference}, \code{swap\_rate\_mean}, \code{swap\_rate\_min}, \code{swap\_rate\_max}, \code{barrier}, \code{swap\_rates}, \code{move\_rates}, \code{construction\_seconds}, \code{chains\_ms}, \code{exchanges\_ms}, \code{updates\_ms}, \code{waiting\_ms}, \code{reference}, \code{gap\_percent} e \code{solution} (a lista está em \code{PTExperiment::csvColumnNames()}). Valores do próprio usuário entram com \code{r.add("nome", valor)} dentro da função da execução: cada nome vira mais uma coluna e fica guardado no arquivo da execução, de modo que não se perde em uma retomada.
+
+\begin{lstlisting}[style=cpp]
+exp.setCsvColumns({"instance", "seed", "value", "rounds", "stop", "barrier", "gap_percent"});
+
+// dentro da função da execução:
+PTRunResult r = ptResult(algo, melhor);
+r.add("trocas_de_ferramenta", melhor.trocas);     // uma medida do problema
+return r;
+\end{lstlisting}
+
+Um experimento interrompido continua de onde parou: as execuções cujo arquivo existe são lidas, e não repetidas (\code{setResume(false)} refaz tudo). Os resumos são regravados ao fim de cada instância, e \code{getSummary()} e \code{getRuns(i)} entregam os mesmos números ao programa. As execuções são feitas uma após a outra, porque cada uma já usa todas as threads que recebe.
+
+\textbf{Várias máquinas.} \code{setShard(indice, partes)} divide o experimento: o processo só faz as execuções da sua parte, de modo que o mesmo programa pode ser iniciado em várias máquinas, gravando na mesma pasta ou em pastas reunidas depois. \code{report()} não executa nada: lê as execuções que estão na pasta e grava todos os relatórios (serve também para refazer o \code{runs.csv} com outras colunas).
+
+\begin{lstlisting}[style=cpp]
+exp.setShard(atoi(argv[1]), 4);   // este processo: parte argv[1] de 4
+exp.run(execucao);
+// depois, uma vez, na pasta com todos os arquivos:
+exp.report();
+\end{lstlisting}
+
+\subsection{Comparação de configurações e testes estatísticos}
+
+Cada configuração é um experimento sobre as mesmas instâncias. O cabeçalho opcional \code{Comparison.h} os coloca lado a lado com os testes normalmente pedidos em um artigo. A primeira configuração adicionada é o \textit{controle}; as demais são comparadas com ela.
+
+\begin{lstlisting}[style=cpp]
+#include "include/Comparison.h"
+
+PTExperiment fixa("res/fixa"), tipo1("res/tipo1");   // run() ou report() em cada um
+PTComparison cmp;
+cmp.add("fixa", fixa);            // controle
+cmp.add("tipo1", tipo1);
+cmp.setAlpha(0.05);               // nível das marcas +, -, = (padrão)
+cmp.write("res");                 // comparison.txt, .csv, _total.csv e .tex
+std::cout << cmp.table();
+\end{lstlisting}
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.20\linewidth}>{\raggedright\arraybackslash}p{0.34\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Nível} & \cab{Teste} & \cab{Resultado} \\
+\midrule
+Cada instância & Mann-Whitney U sobre os valores das execuções das duas configurações & Valor-$p$ e uma marca: \code{+} melhor que o controle, \code{-} pior, \code{=} sem diferença significativa. \\
+Todas as instâncias & Wilcoxon de postos sinalizados sobre as médias das instâncias (pareadas por instância) & Valor-$p$ de cada configuração contra o controle; com mais de uma comparação, também corrigido pelo método de Holm. \\
+Três ou mais configurações & Friedman sobre os postos das médias em cada instância & Posto médio de cada configuração e um valor-$p$. \\
+\bottomrule
+\end{tabela}
+
+A tabela traz ainda, por configuração, o desvio médio (em relação à referência das instâncias, se todas tiverem uma; senão, à melhor média da instância), o número de instâncias em que ela tem a melhor média e a contagem de \code{+}, \code{=} e \code{-}. Todos os testes são bilaterais e usam postos, portanto não supõem valores normais. Os valores-$p$ são exatos para amostras pequenas (Mann-Whitney até 60 valores no total, postos sinalizados até 50 instâncias, com empates) e usam a aproximação normal acima disso; Friedman usa a aproximação qui-quadrado. Os testes também são funções independentes: \code{ptstat::mannWhitney}, \code{ptstat::wilcoxonSignedRank}, \code{ptstat::friedman} e \code{ptstat::holm}.
+
+Saída de \code{exampleComparison}: seis instâncias do TSP, dez execuções, 12 réplicas com escada fixa (controle), 12 réplicas com o tipo 1 e 4 réplicas com escada fixa.
+
+\begin{lstlisting}[style=saida]
+instance       fixed      rate23         p    four_replicas         p
+tsp50        5189.00     5189.00    1.0000 =        5298.30    0.0108 -
+tsp70        6302.10     6311.00    0.6955 =        6453.20   <0.0001 -
+tsp90        7130.10     7170.60    0.0785 =        7297.50   <0.0001 -
+tsp110       7973.90     8025.30    0.3246 =        8136.40    0.0068 -
+tsp130       9008.50     9005.00    0.8113 =        9172.50    0.0052 -
+tsp150       9837.80     9778.60    0.1596 =        9910.70    0.3423 =
+
+configuration    mean rank     gap %  best mean      +    =    -         p      Holm
+fixed                 1.42      0.11          4                    control
+rate23                1.58      0.23          3      0    6    0    0.8125    0.8125
+four_replicas         3.00      2.02          0      0    1    5    0.0312    0.0625
+
+Friedman test (the configurations have the same mean rank): p = 0.0087
+\end{lstlisting}
+
+A leitura é a que se espera: o tipo 1 não se distingue da escada fixa em nenhuma instância, e quatro réplicas são piores em cinco das seis. O exemplo mostra também um limite do método: com seis instâncias, o menor valor-$p$ possível do teste de postos sinalizados é $2/2^6 = 0{,}031$, que a correção de Holm para duas comparações leva a 0,0625; com menos de seis instâncias esse teste não chega a 0,05, qualquer que seja o resultado.
+
+\begin{fonte}
+\textbf{Fonte.} Testes de Mann e Whitney (1947), Wilcoxon (1945) e Friedman (1937) e correção de Holm (1979). A metodologia (postos sinalizados sobre os conjuntos de dados, Friedman e postos médios para vários algoritmos, em vez de testes paramétricos) é a recomendada por Demšar (2006). A implementação é própria e foi conferida com o SciPy e com a enumeração de todos os casos em amostras pequenas (diferenças abaixo de $10^{-14}$).
+\end{fonte}
+
+\subsection{Linha de comando e calibração com o irace}
+
+O cabeçalho opcional \code{Options.h} lê todos os parâmetros do PT da linha de comando, no formato \code{-{}-NOME valor}, com os nomes dos exemplos da v1 (\code{-{}-TEMP\_INIT}, \code{-{}-TEMP\_FIM}, \code{-{}-N\_REPLICAS}, \code{-{}-MCL}, \code{-{}-PTL}, \code{-{}-TEMP\_DIST}, \code{-{}-TYPE\_UPDATE}, \code{-{}-TEMP\_UPDATE}, \code{-{}-THREAD\_USED}) e os da v2 (\code{-{}-SEED}, \code{-{}-TIME\_LIMIT}, \code{-{}-TARGET}, \code{-{}-STAGNATION\_ROUNDS}, \code{-{}-STAGNATION\_TIME}, \code{-{}-SWAP\_SCHEME}, \code{-{}-CALIBRATE}, entre outros). As opções que a API não conhece ficam guardadas para o problema, de modo que os parâmetros do problema são calibrados do mesmo jeito.
+
+\begin{lstlisting}[style=cpp]
+#include "include/Options.h"
+
+int main(int argc, char* argv[]){
+    PTOptions opt(argc, argv);                       // opt.instance = primeiro argumento
+    MeuProblema prob(opt.instance, opt.get("--ALFA", 0.5));
+    minhaSolucao melhor = opt.run<minhaSolucao>(&prob);   // monta o PT, calibra se pedido, executa
+    if(!opt.printForTuner()) std::cout << melhor.evalSol << "\n";
+}
+\end{lstlisting}
+
+Com \code{-{}-IRACE 1} o programa imprime apenas o custo da execução, que é o que o irace (López-Ibáñez et al., 2016) lê; \code{-{}-IRACE 2} imprime custo e tempo. A opção \code{-{}-IRACE\_COST} define o que é minimizado, o que permite calibrar pela função objetivo, pelo tempo de execução ou pelos dois:
+
+\begin{tabela}{l>{\raggedright\arraybackslash}X}
+\toprule
+\cab{\code{-{}-IRACE\_COST}} & \cab{Custo informado ao irace} \\
+\midrule
+\code{value} (padrão) & O valor da função objetivo ao fim da execução. Todas as configurações recebem o mesmo \code{-{}-TIME\_LIMIT}; a qualidade é comparada sob o mesmo tempo. \\
+\code{time} & Os segundos até atingir \code{-{}-TARGET}. Quem não atinge o alvo dentro do limite paga \code{-{}-IRACE\_PENALTY} (padrão 10) vezes o limite. \\
+\code{value+time} & valor $+\ w\ \times$ segundos, com $w$ dado por \code{-{}-IRACE\_TIME\_WEIGHT}: um preço por segundo, para execuções que param sozinhas (estagnação ou PTL). \\
+\bottomrule
+\end{tabela}
+
+A pasta \code{irace/} traz um cenário completo para o exemplo SSP: \code{parameters.txt} (os parâmetros e as faixas), \code{scenario.txt}, \code{target-runner} (o script que o irace chama, onde fica o orçamento de cada execução) e \code{ptSSP.cpp} (o programa, em que só duas linhas dependem do problema). \code{make check} chama o \code{target-runner} uma vez, como o irace faz, e \code{make tune} executa o irace. O cenário foi executado de ponta a ponta com o irace 4.5.1: 300 execuções de 1 s nas dez instâncias de SSP, em 165 s, com este resultado:
+
+\begin{lstlisting}[style=saida]
+# Best configurations as commandlines (listed from best to worst according to the sum of ranks):
+25 --TEMP_INIT 0.312 --TEMP_FIM 2.828 --N_REPLICAS 7 --MCL 101 --TEMP_DIST 4 --TYPE_UPDATE 5 --TEMP_UPDATE 0 --SWAP_SCHEME 0
+16 --TEMP_INIT 0.155 --TEMP_FIM 1.062 --N_REPLICAS 12 --MCL 1150 --TEMP_DIST 3 --TYPE_UPDATE 5 --TEMP_UPDATE 50 --SWAP_SCHEME 1
+26 --TEMP_INIT 0.168 --TEMP_FIM 1.033 --N_REPLICAS 22 --MCL 122 --TEMP_DIST 4 --TYPE_UPDATE 1 --TEMP_UPDATE 20 --SWAP_SCHEME 1
+\end{lstlisting}
+
+Esse orçamento serviu para validar a integração, não para recomendar parâmetros: 300 execuções são poucas para oito parâmetros.
+
+\section{Atualização dinâmica das temperaturas: os sete tipos}\label{s7}
+
+O sétimo argumento do construtor escolhe a regra e o oitavo, o intervalo $\upsilon$ (propostas de troca entre duas atualizações). A v1 tinha os tipos 0 a 3; a v2 mantém os quatro e acrescenta três.
+
+\begin{tabela}{r>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}Xll}
+\toprule
+\cab{Tipo} & \cab{Regra} & \cab{Extremos da escada} & \cab{Reprodutível} & \cab{Situação} \\
+\midrule
+0 & Temperaturas fixas & fixos & sim & v1 \\
+1 & Taxa de troca de 23\% & fixos & sim ($\upsilon \ge 2$) & v1, regra revista \\
+2 & Taxas de troca iguais & fixos & sim & v1, com proteção \\
+3 & \textit{Feedback-optimized}, como na tese & fixos (com 3 ou mais réplicas) & não & v1, inalterada \\
+4 & \textit{Feedback-optimized} por quantis & fixos & não & nova \\
+5 & Aproximação estocástica para 23,4\% & primeira fixa; última $\le$ máxima inicial & sim & nova \\
+6 & Taxas de rejeição iguais & fixos & não & nova \\
+\bottomrule
+\end{tabela}
+
+Cada par mede, na janela de $\upsilon$ propostas, a sua taxa de troca e a energia média das duas réplicas ($\bar{E}$). Os tipos 3 e 4 usam o fluxo de réplicas rotuladas; os tipos 5 e 6 usam a probabilidade de troca calculada em cada proposta, e não a contagem de aceites, que é uma estimativa mais ruidosa da mesma grandeza.
+
+\subsection*{Tipo 1 — taxa de troca de 23\%}
+
+Para cada par, com $\Delta \bar{E}$ a diferença das energias médias e $\Delta \beta$ a distância entre as temperaturas em 1/$T$, a distância que daria 23\% de trocas é obtida de
+
+\[
+0{,}23 = \exp(-\Delta\beta^{*}\,\Delta\bar{E}) \quad\Longrightarrow\quad \Delta\beta^{*} = \frac{-\ln 0{,}23}{\Delta\bar{E}}.
+\]
+
+Se a taxa medida está entre 20\% e 26\%, nada é feito. Fora dessa faixa, o par move a sua distância na direção de $\Delta \beta$* (mais estreita abaixo de 20\%, mais larga acima de 26\%), aplicando metade da correção. A correção é dividida entre as duas temperaturas do par; a primeira e a última temperatura da escada nunca se movem, e nenhuma temperatura ultrapassa o ponto médio até a vizinha.
+
+\begin{fonte}
+\textbf{Fonte.} O alvo de 23,4\% é de Atchadé, Roberts e Rosenthal (2011), na linha de Roberts, Gelman e Gilks (1997); a equação $0{,}23 = e^{\Delta\beta\,\Delta\bar{E}}$ é a da tese. A ancoragem dos extremos, a correção nos dois sentidos, a faixa morta e o amortecimento são adaptações desta versão: a regra da v1 só agia abaixo de 20\% e só aproximava temperaturas, o que fazia a escada inteira descer.
+\end{fonte}
+
+\subsection*{Tipo 2 — taxas de troca iguais}
+
+A temperatura $T_{i}$ é recolocada entre as vizinhas de modo que a probabilidade de troca com a de baixo seja igual à probabilidade de troca com a de cima, $P(r_{i-1} \to r_i) = P(r_i \to r_{i+1})$, usando as energias médias da janela:
+
+\[
+T_i = \frac{\Delta\bar{E}_{i-1} + \Delta\bar{E}_i}{\dfrac{\Delta\bar{E}_{i-1}}{T_{i-1}} + \dfrac{\Delta\bar{E}_i}{T_{i+1}}}.
+\]
+
+Na v2 o novo valor só é aceito se ficar entre as duas vizinhas. Sem essa proteção, com estimativas ruidosas de $\Delta \bar{E}$, a regra produzia escadas fora de ordem e fora do intervalo (em um teste com intervalo de 1 a 60 surgiram temperaturas de 0,33 e 65).
+
+\begin{fonte}
+\textbf{Fonte.} Hukushima (1999), como implementado na tese. A proteção de ordem é desta versão.
+\end{fonte}
+
+\subsection*{Tipo 3 — \textit{feedback-optimized}, como na tese}
+
+Cada temperatura registra a fração $f(T)$ das réplicas rotuladas que a visitaram vindo da primeira temperatura («subindo»). O método procura a escada que maximiza as idas e voltas, tornando a densidade de temperaturas proporcional a
+
+\[
+\eta(T) \propto \sqrt{\frac{\mathrm{d}f/\mathrm{d}T}{\Delta T}}.
+\]
+
+A implementação da tese percorre a escada da primeira para a última temperatura, definindo cada temperatura a partir da anterior com a constante de normalização calculada pelo par da primeira temperatura. Foi mantida exatamente como estava; a única alteração é que os valores lidos por outros pares passaram a ser variáveis atômicas.
+
+\begin{fonte}
+\textbf{Fonte.} Katzgraber, Trebst, Huse e Troyer (2006), na forma descrita na tese.
+\end{fonte}
+
+\subsection*{Tipo 4 — \textit{feedback-optimized} por quantis}
+
+Usa a mesma densidade do tipo 3, mas recalcula a escada inteira de uma vez, com os extremos fixos. A integral da densidade em cada intervalo [$T_{k}$, $T_{k+1}$] é
+
+\[
+w_k = \sqrt{\,|f_k - f_{k+1}|\,},
+\]
+
+e as novas temperaturas são os pontos que dividem a soma acumulada dos $w_{k}$ em $M-1$ partes iguais, com interpolação linear em $T$ dentro de cada intervalo. A atualização só ocorre quando todas as temperaturas têm dados de fluxo, e aplica metade do passo (a nova temperatura é a média entre a atual e a calculada), o que mantém a escada ordenada.
+
+\begin{fonte}
+\textbf{Fonte.} A densidade ótima é a de Katzgraber et al. (2006). A formulação por quantis com extremos fixos e meio passo é desta versão.
+\end{fonte}
+
+\subsection*{Tipo 5 — aproximação estocástica}
+
+A escada é parametrizada pelas razões entre temperaturas vizinhas:
+
+\[
+T_{i+1} = T_i \exp\bigl(\exp(\rho_i)\bigr).
+\]
+
+A cada atualização, o par $i$ corrige o seu parâmetro com um passo decrescente, em que $\bar{p}_{i}$ é a média das probabilidades de troca do par na janela e $n$ conta as atualizações já feitas:
+
+\[
+\rho_i \leftarrow \rho_i + (n+1)^{-0{,}6}\,(\bar{p}_i - 0{,}234).
+\]
+
+Se o par troca mais que 23,4\%, $\rho$ cresce e as temperaturas se afastam; se troca menos, se aproximam. Como o passo diminui, a escada converge em vez de oscilar. A primeira temperatura é fixa e todas as outras decorrem dos $\rho$; a dupla exponencial garante $T_{i+1}$ > $T_{i}$. Os $\rho$ iniciais vêm da escada inicial, que por isso precisa ser crescente (distribuições 1, 3 e 4).
+
+Cada par só escreve a sua temperatura mais quente, depois que o par anterior executou; por isso este é o único dos tipos novos reprodutível com semente.
+
+\begin{fonte}
+\textbf{Fonte.} Miasojedow, Moulines e Vihola (2013): a parametrização, a regra de Robbins–Monro e o alvo de 23,4\% são do artigo, que também prova a convergência da adaptação. Duas escolhas são desta versão: o expoente 0,6 do passo (o artigo exige um expoente entre 0,5 e 1) e o limite da última temperatura à máxima da escada inicial, sem o qual ela dispara em problemas com réplicas de sobra. O artigo também adapta a distribuição de proposta dos movimentos, o que não foi implementado, por depender do problema.
+\end{fonte}
+
+\subsection*{Tipo 6 — taxas de rejeição iguais}
+
+Seja $r_i = 1 - \bar{p}_i$ a rejeição média do par $i$ na janela. A soma acumulada
+
+\[
+\Lambda_k = r_0 + r_1 + \dots + r_{k-1}
+\]
+
+é tratada como função de $\beta = 1/T$, com interpolação linear entre as temperaturas. As novas temperaturas são os pontos em que essa função vale $k/(M-1)$ do total: cada par passa a rejeitar a mesma fração das trocas. Os extremos ficam fixos e é aplicada metade do passo, em $\beta$. A atualização é feita pelo par da primeira temperatura para a escada inteira.
+
+\begin{fonte}
+\textbf{Fonte.} Syed, Bouchard-Côté, Deligiannidis e Doucet (2019): a escada ótima é a que iguala as rejeições, e o procedimento de ajuste é a equalização da barreira de comunicação acumulada. O artigo usa interpolação monotônica e refaz a escada entre rodadas de ajuste; a interpolação linear em 1/$T$, o meio passo e a atualização durante a própria execução são simplificações desta versão.
+\end{fonte}
+
+\subsection*{Efeito de cada regra sobre uma escada ruim}
+
+O exemplo \code{exampleTempUpdate} parte de uma escada linear de 1 a 60 com 10 réplicas (quase sem trocas no extremo frio) e imprime o que cada regra faz (TSP de 100 cidades, 2000 rodadas, $\upsilon = 20$). As taxas são as da execução inteira, incluindo as rodadas anteriores à estabilização.
+
+\begin{lstlisting}[style=saida]
+inicial            1.00   7.56  14.11  20.67  27.22  33.78  40.33  46.89  53.44  60.00
+tipo 0  trocas     0.011  0.022  0.068  0.158  0.178  0.214  0.336  0.306  0.376
+
+tipo 1  final      1.00   1.23   2.03   3.64   6.38   9.84  15.09  24.62  43.66  60.00
+        trocas     0.241  0.242  0.247  0.222  0.194  0.113  0.054  0.035  0.036
+tipo 2  final      1.00   1.30   1.99   2.59  11.24  14.90  25.28  34.72  41.17  60.00
+        trocas     0.095  0.068  0.107  0.146  0.194  0.239  0.258  0.313  0.297
+tipo 3  final      1.00   2.67  17.23  21.88  23.73  27.17  27.17  40.34  40.34  60.00
+        trocas     0.006  0.008  0.214  0.677  0.416  0.909  0.103  0.902  0.040
+tipo 4  final      1.00  17.59  23.96  30.62  37.89  43.10  46.89  50.60  54.88  60.00
+        trocas     0.007  0.154  0.200  0.242  0.420  0.571  0.600  0.514  0.512
+tipo 5  final      1.00   1.16   1.46   1.91   2.34   3.21   5.32   6.93   9.89  25.43
+        trocas     0.013  0.146  0.232  0.182  0.211  0.284  0.198  0.161  0.200
+tipo 6  final      1.00   1.15   1.94   3.99   7.92  13.22  21.62  31.91  45.60  60.00
+        trocas     0.052  0.084  0.099  0.078  0.055  0.085  0.071  0.080  0.064
+\end{lstlisting}
+
+Leitura: o tipo 6 iguala as taxas (5\% a 10\%) mantendo os dois extremos, e mostra que 10 réplicas são poucas para ir de 1 a 60 com boas trocas; o tipo 5 busca 23\% e, para isso, encolhe a escada (termina em 25,4); o tipo 1 chega a 23\% no lado frio e deixa o desvio no lado quente; o tipo 4, que otimiza o fluxo e não a taxa, concentra as temperaturas no lado quente nesta instância.
+
+\subsection*{Intervalo automático entre as atualizações}
+
+O oitavo argumento do construtor é o número de propostas de troca entre duas atualizações. Com \code{PT\_UPDATE\_AUTO} (o valor 0) a API escolhe: a primeira atualização ocorre depois de 10 propostas e cada intervalo é o dobro do anterior (10, 20, 40, \dots). A escada é corrigida muitas vezes no começo, quando está longe de uma boa, e depois com estatísticas de janelas mais longas; e há um parâmetro a menos para calibrar. \code{setAutoUpdate(primeiro, fator)} muda os dois números. Vale para os seis tipos e mantém a reprodutibilidade dos tipos 1, 2 e 5. Na v1 o valor 0 causava uma divisão por zero, de modo que nenhum código existente muda de comportamento.
+
+\begin{fonte}
+\textbf{Fonte.} As rodadas de ajuste de comprimento dobrado são as do procedimento de ajuste de Syed et al. (2019). Aplicá-las às seis regras da API é desta versão. O resultado medido está na \hyperref[s9]{Seção 9.5}: equivalente ao intervalo fixo, sem ganho de qualidade.
+\end{fonte}
+
+\section{Calibração automática das temperaturas}\label{s8}
+
+As duas funções desta seção escolhem temperaturas antes da execução, a partir de medidas feitas no próprio problema. São chamadas entre a construção do objeto e o \code{start()}, e usam a semente de \code{setSeed()}.
+
+\subsection{\code{calibrateTemperatures}: primeira e última temperatura}
+
+\begin{lstlisting}[style=cpp]
+std::pair<double,double> t = algo.calibrateTemperatures(&prob);                // padrões
+std::pair<double,double> t = algo.calibrateTemperatures(&prob, 20000, 0.10, 0.0003);
+//                                             (problema, amostras, aceitaQuente, aceitaFria)
+\end{lstlisting}
+
+Funcionamento:
+
+\begin{enumerate}
+\item A partir de uma solução construída, faz uma descida de \code{amostras} movimentos (padrão 5000), aceitando só os que não pioram.
+\item Guarda os aumentos de custo $\delta$ > 0 dos movimentos rejeitados na segunda metade da descida, quando a solução já está perto de um ótimo local. São os movimentos que uma réplica fria de fato encontra.
+\item Define $A(T)$ como a média de $\exp(-\delta/T)$ sobre essa amostra: a fração dos movimentos de piora que uma réplica na temperatura $T$ aceitaria.
+\item Resolve, por bisseção em log $T$, $A(T_{\mathrm{min}}) = {}$\code{aceitaFria} (padrão 0,001) e $A(T_{\mathrm{max}}) = {}$\code{aceitaQuente} (padrão 0,02), e reconstrói a escada com a distribuição e o número de réplicas do construtor. \end{enumerate}
+
+O custo são \code{amostras} avaliações, não contadas em \code{getEvaluations()}. Para um alvo de 23\% na aceitação dos movimentos da réplica mais quente, usa-se \code{calibrateTemperatures(\allowbreak{}\&prob, 5000, 0.23)}.
+
+\begin{fonte}
+\textbf{Fonte.} Procedimento próprio desta versão. A ideia de obter a temperatura que produz uma taxa de aceitação desejada a partir de uma amostra de movimentos de piora é a mesma usada para a temperatura inicial do \textit{simulated annealing} (Ben-Ameur, 2004); a amostragem na segunda metade de uma descida e os alvos padrão foram escolhidos aqui, por experimento nos problemas TSP, SSP e IPMTC.
+\end{fonte}
+
+\begin{lstlisting}[style=saida]
+defaults                       Tmin   2.706  Tmax   41.214   best 7467
+acceptHot 0.10, cold 0.0003    Tmin   1.847  Tmax  239.485   best 7503
+acceptHot 0.23                 Tmin   2.706  Tmax  427.225   best 7424
+by hand                        Tmin   1.000  Tmax   60.000   best 7485
+\end{lstlisting}
+
+Essas linhas são uma execução de cada opção; a comparação com 20 sementes está na \hyperref[s9]{Seção 9}.
+
+\subsection{\code{calibrateLadder}: escada para uma taxa de troca}
+
+\begin{lstlisting}[style=cpp]
+std::vector<double> escada = algo.calibrateLadder(&prob);                       // 23%
+std::vector<double> escada = algo.calibrateLadder(&prob, 0, 0.23, 1000, 30, 2.0);
+//                               (problema, threads, taxa, rodadas, iteracoes, Tmin)
+\end{lstlisting}
+
+Mantém a primeira temperatura e procura todas as outras com execuções-piloto do próprio PT. A escada é escrita como $T_{i+1} = T_i\,e^{e^{\rho_i}}$ e os pilotos usam a aproximação estocástica do tipo 5 com a taxa pedida como alvo:
+
+\begin{enumerate}
+\item A cada 10 propostas de troca, cada par corrige o seu $\rho_i$ em $\gamma_n(\bar{p}_i - \mathit{alvo})$, em que $\bar{p}_i$ é a probabilidade média de troca do par desde a correção anterior e $\gamma_n = (n+1)^{-0{,}6}$: a distância cresce se o par troca acima do alvo e diminui se troca abaixo.
+\item São feitos \code{iteracoes} pilotos (padrão 10) de \code{rodadas} rodadas (padrão 200), cada um continuando das réplicas e da escada do anterior; o passo $\gamma_n$ continua decrescendo de um piloto para o outro.
+\item A escada devolvida usa a média dos $\rho_i$ na segunda metade dos pilotos, o que filtra o ruído da medida. \end{enumerate}
+
+A última temperatura é um resultado: é onde o número de réplicas chega com aquela taxa. Se há mais réplicas do que a taxa pede, a escada para na temperatura que já aceita 90\% dos movimentos (um passeio aleatório, acima do qual temperaturas mais altas nada acrescentam) e as réplicas restantes ficam próximas dela. Sem esse limite a escada cresceu sem controle nos problemas SSP e IPMTC (temperatura máxima de $10^{65}$). Os pilotos custam iterações $\times$ rodadas $\times$ réplicas $\times$ MCL avaliações e ignoram os critérios de parada, o \textit{callback} e o checkpoint do objeto.
+
+As duas calibrações se combinam: \code{calibrateTemperatures} define a primeira temperatura e \code{calibrateLadder}, as demais.
+
+\begin{fonte}
+\textbf{Fonte.} A regra de correção é a aproximação estocástica de Miasojedow, Moulines e Vihola (2013), a mesma do tipo 5; o alvo padrão de 23\% vem de Atchadé, Roberts e Rosenthal (2011). São próprios desta versão o uso em pilotos separados da execução, a média dos $\rho_i$ na segunda metade e o limite de 90\% de aceitação.
+\end{fonte}
+
+\begin{lstlisting}[style=saida]
+geometric ladder from 1 to 60: best 7592, round trips 1, mean exchange rate 0.11
+   exchange rate    0.064   0.127   0.175   0.228   0.186   0.115   0.051   0.021   0.003
+calibrateLadder, 23%: best 7597, round trips 3, mean exchange rate 0.20
+   ladder            1.00    1.18    1.36    1.98    2.67    4.64    6.73    9.59   11.22   15.13
+   exchange rate    0.023   0.165   0.054   0.088   0.157   0.289   0.276   0.555   0.161
+calibrateLadder, 23%, 10 pilot runs of 200 rounds, from T = 20: best 7621, round trips 10, mean exchange rate 0.24
+   ladder           20.00   24.47   30.33   36.23   43.07   50.03   58.08   67.41   77.55   90.62
+   exchange rate    0.286   0.179   0.207   0.273   0.288   0.262   0.229   0.265   0.198
+   largest deviation of a pair from 23%: 0.058
+\end{lstlisting}
+
+\begin{nota}
+\textbf{Precisão medida} (TSP de 100 cidades, 10 réplicas, 10 sementes, alvo de 23\%, taxas medidas em uma execução de 5000 rodadas depois da calibração). A partir de $T = 20$, onde as réplicas continuam se movendo, o desvio médio de um par em relação ao alvo foi de 0,025 com os pilotos padrão e de 0,021 com 30 pilotos de 1000 rodadas; com a escada fixa a taxa de um par já varia 0,02 entre sementes, de modo que o resultado está perto do que a medida permite. A regra anterior desta função (correção inteira a cada piloto, pelo fator $\sqrt{\ln(\mathit{alvo})/\ln(\mathit{taxa})}$) dava 0,052 nas mesmas condições. A partir de $T = 1$ as réplicas mais frias ficam presas em ótimos locais: a taxa de um par passa a depender das duas soluções que ele guarda e varia 0,10 entre sementes com a mesma escada, e nenhuma escada cumpre o alvo em toda execução (desvio médio de 0,09; é o caso da segunda saída acima). Ver \hyperref[s11]{Seção 11}.
+\end{nota}
+
+\section{Resultados medidos}\label{s9}
+
+Todos os valores são a média da melhor solução em 20 sementes (menor é melhor), com o desvio-padrão entre parênteses quando foi registrado. As diferenças menores que um desvio-padrão não devem ser lidas como ganho ou perda.
+
+\subsection{Tipos de atualização no TSP}
+
+TSP euclidiano aleatório, 16 réplicas, escada geométrica de 1 a 60, PTL 1000; MCL 200 para 100 cidades e 500 para 200 cidades. Os desvios-padrão ficaram entre 26 e 99.
+
+\begin{tabela}{r>{\raggedright\arraybackslash}Xrr}
+\toprule
+\cab{Tipo} & \cab{Regra} & \cab{TSP 100} & \cab{TSP 200} \\
+\midrule
+0 & fixa & 7480,9 & 11134,7 \\
+1 & 23\% & 7469,9 & 11119,5 \\
+2 & taxas iguais & 7504,2 & 11128,0 \\
+3 & \textit{feedback} (tese) & 7510,8 & 11188,0 \\
+4 & \textit{feedback} (quantis) & 7460,6 & 11113,8 \\
+5 & aproximação estocástica & 7478,1 & 11078,6 \\
+6 & rejeição igual & 7478,9 & 11128,5 \\
+\bottomrule
+\end{tabela}
+
+Quase tudo está dentro do ruído. O único resultado que se destaca é o tipo 5 no TSP de 200 cidades (11078,6 com desvio 46, contra 11134,7 da escada fixa). A proteção de ordem do tipo 2 melhorou o seu resultado no TSP 100 de 7562 para 7504.
+
+\subsection{Tipos 5 e 6 nos exemplos da v1}
+
+16 réplicas, MCL 400, PTL 400, intervalo de atualização 20; SSP com temperaturas de 0,2 a 1.
+
+\begin{tabela}{>{\raggedright\arraybackslash}Xrrr}
+\toprule
+\cab{Problema (instância)} & \cab{Tipo 0 (fixa)} & \cab{Tipo 5} & \cab{Tipo 6} \\
+\midrule
+SSP (F1001) & 251,55 & 252,10 & 251,50 \\
+IPMTC (Large1) & 2189,70 & 2196,20 & 2201,35 \\
+\bottomrule
+\end{tabela}
+
+Nenhum dos dois superou a escada fixa escolhida à mão nesses problemas; as diferenças estão dentro do ruído (desvio de 20 a 27 no IPMTC).
+
+\subsection{Calibração}
+
+\begin{tabela}{>{\raggedright\arraybackslash}Xrrr}
+\toprule
+\cab{Problema} & \cab{Temperaturas à mão} & \cab{\code{calibrateTemperatures}} & \cab{\code{calibrateLadder}} \\
+\midrule
+TSP 100 & 7480,9 (26,4) & 7456,0 (30,1) & 7457,3 (24,6) \\
+SSP F1001 & 251,55 (1,16) & 251,75 (1,04) & 251,50 \\
+IPMTC Large1 & 2189,7 (27,0) & 2201,3 (28,9) & 2198,9 (27,6) \\
+\bottomrule
+\end{tabela}
+
+A calibração chega a um resultado equivalente ao das temperaturas escolhidas à mão, sem exigir conhecimento do problema; não as supera de forma significativa. Os valores de \code{calibrateLadder} desta tabela foram medidos com a regra de correção anterior à atual e não foram repetidos; o do IPMTC é também anterior ao limite de 90\% de aceitação.
+
+\subsection{Esquema de troca}
+
+\begin{tabela}{>{\raggedright\arraybackslash}Xrr}
+\toprule
+\cab{Problema} & \cab{Sequencial} & \cab{Par-ímpar} \\
+\midrule
+TSP 100 & 7480,9 & 7476,9 \\
+TSP 200 & 11134,7 & 11110,6 \\
+SSP F1001 & 251,55 & 251,40 \\
+IPMTC Large1 & 2189,7 & 2192,0 \\
+\bottomrule
+\end{tabela}
+
+Não houve diferença significativa, e o número de idas e voltas foi igual ou menor com o esquema par-ímpar. O ganho descrito por Syed et al. (2019) é para amostragem em equilíbrio com muitas réplicas; nestes testes de otimização, com poucas rodadas, ele não apareceu.
+
+\subsection{Intervalo de atualização automático}
+
+Mesma configuração da Seção 9.1; o intervalo fixo é de 50 propostas. Desvio-padrão entre parênteses.
+
+\begin{tabela}{rlrrrr}
+\toprule
+\cab{Tipo} & \cab{Regra} & \cab{TSP 100, fixo} & \cab{TSP 100, automático} & \cab{TSP 200, fixo} & \cab{TSP 200, automático} \\
+\midrule
+1 & 23\% & 7470,7 (45) & 7481,8 (30) & 11118,8 (78) & 11109,8 (96) \\
+2 & taxas iguais & 7506,8 (43) & 7521,5 (59) & 11123,5 (103) & 11176,6 (75) \\
+3 & \textit{feedback} (tese) & 7519,2 (74) & 7508,8 (47) & 11182,5 (117) & 11178,2 (71) \\
+4 & \textit{feedback} (quantis) & 7465,3 (47) & 7474,6 (42) & 11120,1 (119) & 11155,6 (130) \\
+5 & aproximação estocástica & 7473,8 (40) & 7504,9 (30) & 11084,5 (50) & 11106,1 (114) \\
+6 & rejeição igual & 7506,1 (45) & 7499,4 (40) & 11114,1 (74) & 11159,3 (90) \\
+\bottomrule
+\end{tabela}
+
+O intervalo automático ficou equivalente ao fixo dentro do ruído, com tendência a ser um pouco pior (na média dos seis tipos, $+8$ com 100 cidades e $+24$ com 200); a diferença mais nítida é a do tipo 5 com 100 cidades. Ele é uma conveniência, que elimina um parâmetro, e não um meio de obter soluções melhores; por isso não é o padrão. Esta tabela foi medida com a versão atual e repete, para o intervalo fixo, a medição da Seção 9.1; as pequenas diferenças entre as duas (por exemplo, 7506,1 contra 7478,9 no tipo 6) vêm dos tipos não reprodutíveis e dão a dimensão do ruído.
+
+\section{Testes, exemplos e estrutura de pastas}\label{s10}
+
+\begin{lstlisting}[style=saida]
+PTAPI/
+ ├─ include/            núcleo da API (só cabeçalhos)
+ │    PT.h              classe PT: configuração, start(), calibrações, checkpoint, resultados
+ │    Problem.h         interface do problema, geradores aleatórios, movimentos
+ │    NodeMCMC.h        nó MC          NodeSwap.h   nó SW          NodeTempUp.h   nó TU
+ │    Consumer.h        estado da execução (melhor solução, parada)     Pool.h   threads
+ │    Experiment.h      gerenciamento de experimentos (opcional)
+ │    Comparison.h      comparação de experimentos e testes estatísticos (opcional)
+ │    Options.h         parâmetros pela linha de comando, para o irace (opcional)
+ ├─ example/            quickstart.cpp, exampleTSP.cpp e SSP, IPMTC, RCPMS (exemplos da v1, no estilo da v2)
+ │   └─ functions/      18 exemplos, um por grupo de funções (make run)
+ ├─ instances/          instâncias dos exemplos
+ ├─ tests/              testes unitários (make test | tsan | asan | all)
+ ├─ irace/              calibração dos parâmetros com o irace (cenário, target-runner, exemplo)
+ ├─ bench/              comparação de tempo com a v1 (make bench | bench-sd)
+ ├─ v1/                 núcleo da v1, mantido para a comparação de tempo
+ └─ docs/               manual (Markdown, em inglês) e report/: este documento e os arquivos que o geram
+\end{lstlisting}
+
+\subsection*{Testes}
+
+A suíte \code{tests/\allowbreak{}test\_\allowbreak{}ptapi.cpp} tem 44 testes, sobre três problemas pequenos com codificações diferentes (permutação, binária e contínua). Cobre: as quatro distribuições de temperatura; todos os critérios de parada; a reprodutibilidade com semente para qualquer número de threads; a equivalência das formas de \code{evaluate}; os seis tipos de atualização dinâmica, com intervalo fixo e automático, e a ancoragem dos extremos; as duas calibrações; movimentos com probabilidades; checkpoint e retomada, incluindo arquivos danificados; os dois esquemas de troca; os critérios de parada novos e o motivo do término; a construção por réplica, também em paralelo; o tempo por componente; o gerenciador de experimentos, incluindo a retomada; as opções de linha de comando; as estatísticas; o tratamento de erros; e uma verificação estatística de que cada temperatura amostra a distribuição de Boltzmann, nos dois esquemas de troca. Deve ser executada depois de qualquer mudança no núcleo (\code{make test}) e, antes de uma liberação, também com \code{make tsan} e \code{make asan}.
+
+\subsection*{Exemplos por função}
+
+Em \code{example/\allowbreak{}functions/\allowbreak{}}, \code{make run} compila e executa todos; cada programa devolve 0 somente se o comportamento descrito no seu cabeçalho se confirmou.
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.34\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Programa} & \cab{Funções} \\
+\midrule
+\code{exampleSeed} & \code{setSeed}, \code{getSeed}, \code{ptapi::rng}, \code{randInt}, \code{rand01} \\
+\code{exampleStop} & \code{setTimeLimit}, \code{setTargetValue}, \code{setPTLStopEnd}, \code{setOnImprove}, \code{requestStop} \\
+\code{exampleEvaluate} & as três formas de \code{evaluate} e \code{neighborEval} \\
+\code{exampleTemperatures} & as quatro distribuições, \code{setTemperatures}, uma única réplica \\
+\code{exampleInitialSolutions} & \code{setInitialSolutions}, \code{getReplicas} \\
+\code{exampleTempUpdate} & os sete tipos de atualização \\
+\code{exampleCalibrateTemperatures} & \code{calibrateTemperatures} \\
+\code{exampleCalibrateLadder} & \code{calibrateLadder}, sozinha e combinada \\
+\code{exampleMoves} & \code{setMoveProbabilities}, \code{chooseMove}, \code{getMoveStatistics} \\
+\code{exampleCheckpoint} & \code{setCheckpoint}, \code{loadCheckpoint}, \code{saveCheckpoint} \\
+\code{exampleSwapScheme} & \code{setSwapScheme}, \code{getRoundTrips}, \code{getCommunicationBarrier} \\
+\code{exampleStatistics} & \code{getConvergence}, avaliações, tempos, taxas de aceitação \\
+\code{exampleV1Compatibility} & classe escrita para a v1, \code{setV1Compatibility} \\
+\code{exampleAutoUpdate} & \code{PT\_UPDATE\_AUTO}, \code{setAutoUpdate} \\
+\code{exampleTiming} & \code{setProfiling}, \code{getTiming} \\
+\code{exampleExperiment} & \code{PTExperiment}, \code{PTRunResult}, \code{ptResult}, curvas, \code{setShard}, \code{report} \\
+\code{exampleComparison} & \code{PTComparison} e os testes de \code{ptstat} \\
+\code{exampleOptions} & \code{PTOptions} \\
+\bottomrule
+\end{tabela}
+
+\subsection*{Exemplos da v1}
+
+As cópias de SSP, IPMTC e RCPMS em \code{example/\allowbreak{}} foram reescritas no estilo da v2: \code{ptapi::rng()} em vez de um gerador por chamada, \code{double evaluate(\allowbreak{}const S\&)}, sem \code{Nup}/\code{Ndown} e sem \code{omp.h}, com o movimento aplicado ao próprio argumento de \code{neighbor()}. Os programas principais ganharam as opções \code{--SEED}, \code{--TIME\_\allowbreak{}LIMIT}, \code{--CALIBRATE 1|2|3} e \code{--SWAP\_\allowbreak{}SCHEME 0|1}, e imprimem as estatísticas da execução. Os exemplos originais, com \code{double evaluate(\allowbreak{}S)}, continuam compilando sem alteração.
+
+\section{Limitações conhecidas e pontos em aberto}\label{s11}
+
+\begin{itemize}
+\item \textbf{\code{calibrateLadder} só cumpre a taxa pedida onde as réplicas se movem.} Em temperaturas em que as réplicas ficam presas em ótimos locais a taxa de troca não é uma propriedade da escada (varia 0,10 entre sementes com a escada fixa, no TSP a partir de $T = 1$) e sobe ao longo da execução, à medida que a busca congela. Nesse caso a calibração acerta apenas na média; as opções são começar de uma primeira temperatura mais alta ou usar uma atualização dinâmica durante a execução.
+\item \textbf{Tipos 3, 4 e 6 não são reprodutíveis com semente}, porque um par lê estatísticas de outros pares que podem estar em execução. O resultado é válido, mas duas execuções com a mesma semente podem diferir.
+\item \textbf{Tipos 1 e 5 exigem escada crescente} (distribuições 1, 3 e 4). A combinação da distribuição 2 (decrescente) com as atualizações dinâmicas não foi tratada.
+\item \textbf{Nenhuma regra dinâmica superou de forma consistente uma boa escada fixa} nos problemas testados. O valor prático delas está em não exigir essa boa escada de partida.
+\item \textbf{A retomada de um checkpoint não é uma repetição bit a bit} (Seção 6.6).
+\item \textbf{As probabilidades dos movimentos são fixas}; a API mede o uso de cada movimento, mas não adapta os pesos.
+\item \textbf{O intervalo de atualização automático não melhora a qualidade} (Seção 9.5); elimina um parâmetro, e só.
+\item \textbf{A construção em paralelo exige código de construção seguro para threads} e, havendo soluções iniciais de mesmo custo, a melhor solução da rodada zero pode ser qualquer uma delas.
+\item \textbf{As execuções de um experimento são sequenciais}; o gerenciador não distribui execuções entre máquinas.
+\item \textbf{O cenário do irace foi validado com orçamento pequeno} (300 execuções); os parâmetros que ele devolveu não são uma recomendação.
+\item \textbf{As linhas de SD do benchmark não foram repetidas} depois das alterações posteriores à primeira medição. \end{itemize}
+
+Ideias lidas e não implementadas: ajuste do número de réplicas durante a execução (Łącki e Miasojedow, 2016); PT em duas dimensões, com uma segunda escada sobre a penalidade das restrições (Delacour et al., 2025; Sim, Choi e Park, 2026); caminhos otimizados entre a distribuição de referência e a alvo (Syed et al., 2021); otimização das temperaturas por gradiente (Miyata, Arai e Takabe, 2026).
+
+\section{Origem de cada método}\label{s12}
+
+Resumo das atribuições feitas ao longo do documento. «Própria» indica uma regra ou adaptação criada nesta versão, sem publicação que a descreva.
+
+\begin{tabela}{>{\raggedright\arraybackslash}p{0.25\linewidth}>{\raggedright\arraybackslash}p{0.31\linewidth}>{\raggedright\arraybackslash}X}
+\toprule
+\cab{Recurso} & \cab{Fonte} & \cab{O que é próprio da v2} \\
+\midrule
+PT e critério de troca & Geyer (1991); Hukushima e Nemoto (1996) & — \\
+Modelo \textit{dataflow} (MC, SW, TU) & Tese do autor da API & Escalonamento (fila única, contadores atômicos, continuação na thread, espera em duas fases) \\
+Tipo 1: 23\% & Atchadé, Roberts e Rosenthal (2011); equação da tese & Extremos fixos, correção nos dois sentidos, faixa morta, amortecimento \\
+Tipo 2: taxas iguais & Hukushima (1999) & Proteção de ordem \\
+Tipo 3: \textit{feedback} & Katzgraber et al. (2006), como na tese & Apenas a correção da condição de corrida \\
+Tipo 4: \textit{feedback} por quantis & Katzgraber et al. (2006) (densidade ótima) & Cálculo global por quantis, extremos fixos, meio passo \\
+Tipo 5: aproximação estocástica & Miasojedow, Moulines e Vihola (2013) & Expoente 0,6 e limite na temperatura máxima inicial \\
+Tipo 6: rejeição igual & Syed et al. (2019) & Interpolação linear em 1/$T$, meio passo, ajuste durante a execução \\
+Esquema par-ímpar & Okabe et al. (2001); Syed et al. (2019) & — \\
+Idas e voltas & Katzgraber et al. (2006) & — \\
+Barreira de comunicação & Syed et al. (2019) & — \\
+\code{calibrateTemperatures} & Ideia relacionada: Ben-Ameur (2004) & Própria (amostra da segunda metade de uma descida; alvos padrão) \\
+\code{calibrateLadder} & Alvo de 23\%: Atchadé, Roberts e Rosenthal (2011) & Regra de correção: Miasojedow, Moulines e Vihola (2013). Própria: pilotos do PT, média na segunda metade, limite de 90\% \\
+Intervalo de atualização automático & Syed et al. (2019) (rodadas de ajuste dobradas) & Aplicação às seis regras da API \\
+Integração com o irace & López-Ibáñez et al. (2016) & Opções de linha de comando e os três custos \\
+Comparação de configurações & Mann e Whitney (1947); Wilcoxon (1945); Friedman (1937); Holm (1979); metodologia de Demšar (2006) & Valores-$p$ exatos com empates; tabelas \\
+Tempo até o alvo & Aiex, Resende e Ribeiro (2007) & Apenas os dados do gráfico \\
+Checkpoint, movimentos com probabilidades, critérios de parada, semente, estatísticas, tempo por componente, gerenciador de experimentos (curvas, partes, relatórios), construção por réplica & — & Recursos de engenharia desta versão \\
+\bottomrule
+\end{tabela}
+
+\section*{Referências}\label{s13}\addcontentsline{toc}{section}{Referências}
+
+\begin{referencias}
+\refitem AIEX, R. M.; RESENDE, M. G. C.; RIBEIRO, C. C. TTT plots: a perl program to create time-to-target plots. \textit{Optimization Letters}, v. 1, p. 355–366, 2007.
+
+\refitem ATCHADÉ, Y. F.; ROBERTS, G. O.; ROSENTHAL, J. S. Towards optimal scaling of Metropolis-coupled Markov chain Monte Carlo. \textit{Statistics and Computing}, v. 21, p. 555–568, 2011.
+
+\refitem BEN-AMEUR, W. Computing the initial temperature of simulated annealing. \textit{Computational Optimization and Applications}, v. 29, n. 3, p. 369–385, 2004.
+
+\refitem DELACOUR, C.; SAJEEB, M. M. H.; HESPANHA, J. P.; CAMSARI, K. Y. Two-dimensional parallel tempering for constrained optimization. arXiv:2506.14781, 2025. \textit{(lido; não implementado)}
+
+\refitem DEMŠAR, J. Statistical comparisons of classifiers over multiple data sets. \textit{Journal of Machine Learning Research}, v. 7, p. 1–30, 2006.
+
+\refitem FRIEDMAN, M. The use of ranks to avoid the assumption of normality implicit in the analysis of variance. \textit{Journal of the American Statistical Association}, v. 32, n. 200, p. 675–701, 1937.
+
+\refitem GEYER, C. J. Markov chain Monte Carlo maximum likelihood. In: \textit{Computing Science and Statistics: Proceedings of the 23rd Symposium on the Interface}. Interface Foundation of North America, 1991.
+
+\refitem HOLM, S. A simple sequentially rejective multiple test procedure. \textit{Scandinavian Journal of Statistics}, v. 6, n. 2, p. 65–70, 1979.
+
+\refitem HUKUSHIMA, K. Domain-wall free energy of spin-glass models: numerical method and boundary conditions. \textit{Physical Review E}, v. 60, p. 3606–3613, 1999.
+
+\refitem HUKUSHIMA, K.; NEMOTO, K. Exchange Monte Carlo method and application to spin glass simulations. \textit{Journal of the Physical Society of Japan}, v. 65, n. 6, p. 1604–1608, 1996.
+
+\refitem LÓPEZ-IBÁÑEZ, M.; DUBOIS-LACOSTE, J.; PÉREZ CÁCERES, L.; BIRATTARI, M.; STÜTZLE, T. The irace package: iterated racing for automatic algorithm configuration. \textit{Operations Research Perspectives}, v. 3, p. 43–58, 2016.
+
+\refitem KATZGRABER, H. G.; TREBST, S.; HUSE, D. A.; TROYER, M. Feedback-optimized parallel tempering Monte Carlo. \textit{Journal of Statistical Mechanics: Theory and Experiment}, v. 2006, n. 03, p. P03018, 2006.
+
+\refitem ŁĄCKI, M. K.; MIASOJEDOW, B. State-dependent swap strategies and automatic reduction of number of temperatures in adaptive parallel tempering algorithm. \textit{Statistics and Computing}, v. 26, p. 951–964, 2016. arXiv:1406.3218. \textit{(lido; não implementado)}
+
+\refitem MANN, H. B.; WHITNEY, D. R. On a test of whether one of two random variables is stochastically larger than the other. \textit{The Annals of Mathematical Statistics}, v. 18, n. 1, p. 50–60, 1947.
+
+\refitem MIASOJEDOW, B.; MOULINES, E.; VIHOLA, M. An adaptive parallel tempering algorithm. \textit{Journal of Computational and Graphical Statistics}, v. 22, n. 3, p. 649–664, 2013. arXiv:1205.1076.
+
+\refitem MIYATA, T.; ARAI, S.; TAKABE, S. Refined gradient-based temperature optimization for the replica-exchange Monte-Carlo method. arXiv:2601.13542, 2026. \textit{(lido; não implementado)}
+
+\refitem OKABE, T.; KAWATA, M.; OKAMOTO, Y.; MIKAMI, M. Replica-exchange Monte Carlo method for the isobaric–isothermal ensemble. \textit{Chemical Physics Letters}, v. 335, p. 435–439, 2001.
+
+\refitem ROBERTS, G. O.; GELMAN, A.; GILKS, W. R. Weak convergence and optimal scaling of random walk Metropolis algorithms. \textit{The Annals of Applied Probability}, v. 7, n. 1, p. 110–120, 1997.
+
+\refitem SIM, K.; CHOI, S.; PARK, J. Solving integer linear programming with parallel tempering. arXiv:2605.29366, 2026. \textit{(lido; não implementado)}
+
+\refitem SYED, S.; BOUCHARD-CÔTÉ, A.; DELIGIANNIDIS, G.; DOUCET, A. Non-reversible parallel tempering: a scalable highly parallel MCMC scheme. arXiv:1905.02939, 2019. Publicado em \textit{Journal of the Royal Statistical Society: Series B}, v. 84, n. 2, p. 321–350, 2022.
+
+\refitem SYED, S.; ROMANIELLO, V.; CAMPBELL, T.; BOUCHARD-CÔTÉ, A. Parallel tempering on optimized paths. In: \textit{Proceedings of the 38th International Conference on Machine Learning (ICML)}, 2021. arXiv:2102.07720. \textit{(lido; não implementado)}
+
+\refitem WILCOXON, F. Individual comparisons by ranking methods. \textit{Biometrics Bulletin}, v. 1, n. 6, p. 80–83, 1945.
+
+\refitem Tese de doutorado do autor da PTAPI (Universidade Federal de Ouro Preto), 2024: Capítulo 5, implementação paralela para CPU, e os três métodos de ajuste de temperatura da v1.
+ \end{referencias}
+
+{\small Os dados de periódico de Ben-Ameur (2004), Okabe et al. (2001), Miasojedow et al. (2013), Łącki e Miasojedow (2016), Syed et al. (2021, 2022), López-Ibáñez et al. (2016), Aiex et al. (2007), Demšar (2006), Friedman (1937), Holm (1979), Mann e Whitney (1947) e Wilcoxon (1945) foram citados de memória e devem ser conferidos antes de uso em publicação; os demais vêm da lista de referências da tese ou da primeira página dos arquivos baixados.\par}
+
+\end{document}

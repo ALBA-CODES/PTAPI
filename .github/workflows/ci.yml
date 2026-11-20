@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [test, tsan, asan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests (${{ matrix.target }})
+        run: make -C tests ${{ matrix.target }}
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quick start
+        run: make -C example quickstart && ./example/quickstart
+      - name: One example for each group of functions
+        run: make -C example/functions run
+      - name: Examples of version 1 and the irace program
+        run: make -C example all && make -C irace

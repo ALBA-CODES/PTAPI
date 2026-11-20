@@ -1,179 +1,122 @@
 #ifndef __NODESWAP_H__
 #define __NODESWAP_H__
 
-
-#include <limits.h>
+#include <cmath>
+#include <random>
+#include <chrono>
+#include <algorithm>
 #include "NodeTempUp.h"
 #include "ReplicaEst.h"
 
+// SW node: exchange proposal between two adjacent temperatures.
 template<typename S>
 class NodeSwap: public Node{
 	private:
-		Node* left; 
-		Node* right;
-		Node* tempUp;
+		NodeMCMC<S>* left;
+		NodeMCMC<S>* right;
+		NodeTempUp<S>* tempUp;
 		Consumer<S>* pool;
-		int accept = 0;
-		int upTime = INT_MAX;
-		ReplicaEst* replicaEstL; 
-		ReplicaEst* replicaEstR; 
-		std::default_random_engine gen;
-		std::uniform_real_distribution<double> dis;
+		int round = 0;
+		long long attempts = 0;      // exchange proposals (= round, except in the even-odd scheme)
+		int index = 0;               // position of the pair in the ladder
+		bool evenOdd = false;        // true: the pair only proposes on alternate rounds
+		int accept = 0;              // accepted since the last temperature update
+		long long acceptTotal = 0;
+		// Temperature updates: the next one happens when 'attempts' reaches 'nextUpdate';
+		// 'window' is the number of proposals since the previous one. With growth > 1
+		// the window grows after each update (automatic interval).
+		long long nextUpdate = 0;
+		long long window = 0;
+		double growth = 1.0;
+		bool v1Compat;
+		// time spent in this node and in its temperature updates (PT::setProfiling)
+		bool prof = false;
+		long long runNs = 0;
+		long long updateNs = 0;
+		ReplicaEst replicaEstL;
+		ReplicaEst replicaEstR;
+		ptapi::Rng gen;
+		std::uniform_real_distribution<double> dis{0.0, 1.0};
 	public:
-		NodeSwap(Node* left_, Node* right_,Consumer<S>* pool_, atomic<int>* PTL_);
-		NodeSwap(Node* left_, Node* right_, Node* tempUp_ ,Consumer<S>* pool_, atomic<int>* PTL_, int UPL_);
-		~NodeSwap();
-		void swap();
-		void run();
-		void start();
-		bool ready();
-		bool notify();
-		bool observer(Node* from);
-};
+		// UPL_: proposals between two temperature updates (<= 0: never). growth_ > 1:
+		// UPL_ is only the first interval and each of the following is growth_ times longer.
+		NodeSwap(NodeMCMC<S>* left_, NodeMCMC<S>* right_, NodeTempUp<S>* tempUp_, Consumer<S>* pool_, int UPL_, ptapi::Rng gen_, bool v1Compat_ = false, int index_ = 0, bool evenOdd_ = false, double growth_ = 1.0)
+		: left(left_), right(right_), tempUp(tempUp_), pool(pool_), index(index_), evenOdd(evenOdd_), nextUpdate(UPL_ > 0 ? UPL_ : -1), window(UPL_), growth(growth_), v1Compat(v1Compat_), gen(gen_) {}
 
-template<typename S>
-NodeSwap<S>::NodeSwap(Node* left_, Node* right_, Consumer<S> *pool_, atomic<int>* PTL_)
-:left(left_)
-,right(right_)
-,pool(pool_)
-{
-	execMax = PTL_;
-	indexPT = pool_->getIndexPT();
-	replicaEstL = new ReplicaEst();
-	replicaEstR = new ReplicaEst();
-}
-
-template<typename S>
-NodeSwap<S>::NodeSwap(Node* left_, Node* right_,Node* tempUp_ , Consumer<S>* pool_, atomic<int>* PTL_, int UPL_)
-:left(left_)
-,right(right_)
-,tempUp(tempUp_)
-,pool(pool_)
-,upTime(UPL_)
-{
-	execMax = PTL_;
-	indexPT = pool_->getIndexPT();
-	replicaEstL = new ReplicaEst();
-	replicaEstR = new ReplicaEst();
-}
-
-template<typename S>
-NodeSwap<S>::~NodeSwap(){
-}
-
-template<typename S>
-void NodeSwap<S>::run(){
-	// Checks whether the execution has reached the end
-	if(theEnd()){
-		 pool->theEnd();
-		endN = true;
-	}
-
-	double temp1 = ((NodeMCMC<S>*)left)->getTemp();
-	double temp2 = ((NodeMCMC<S>*)right)->getTemp();
-	double energia1 = ((NodeMCMC<S>*)left)->getEnergia();
-	double energia2 = ((NodeMCMC<S>*)right)->getEnergia();
-	replicaEstL->Push(energia1);
-	replicaEstR->Push(energia2);
-	
-	// Calculation of the exponent of exp
-	double deltaBeta = ((1.0/temp1) - (1.0/temp2)) * (energia1-energia2);
-	//When delta is greater than and equal to 0, it always changes
-	if(deltaBeta >= 0){									
-		swap();							
-		++accept;
-	}else{
-		//Calc exchange probability
-		double probab;
-		probab = exp(deltaBeta);
-		//Troca aceita
-		if(dis(gen) <= probab){
-			swap();	
-			++accept;
-		} 
-	} // End if/else
-			
-	// Reset to receve new request
-	reset();
-	
-	if((execAtual%upTime) == 0){
-		((NodeTempUp<S>*)tempUp)->setacceptRate((double)accept/(double)execAtual);
-		((NodeTempUp<S>*)tempUp)->setEnergy(replicaEstL->Mean(), replicaEstR->Mean());
-		tempUp->run();
-		accept = 0;
-		replicaEstL->Clear();
-		replicaEstR->Clear();		
-	}
-		 
-	// Notify nodes forward
-	notify();
-}
-
-template<typename S>
-bool NodeSwap<S>::ready(){
-	
-	for(vector<std::pair<Node*,bool>>::iterator it = edgeto.begin(); it != edgeto.end(); it++){
-		if(!it->second) return false;
-	}
-	
-	return true;
-}
-
-template<typename S>
-bool NodeSwap<S>::notify(){
-	
-	for(vector<std::pair<Node*,bool>>::iterator it = edgeFrom.begin(); it != edgeFrom.end(); it++){
-		Node* to = it->first;
-		if(!to->observer(this))return false;	
-	}
-	
-	return true;
-}
-
-template<typename S>
-bool NodeSwap<S>::observer(Node* from){
-	bool status = false;
-	bool ready = true;
-	
-	mtxNode.lock();
-	for(vector<std::pair<Node*,bool>>::iterator it = edgeto.begin(); it != edgeto.end(); it++){
-		
-		if(it->first == from){
-			it->second = true;
-			status = true;
+		bool run() override {
+			if(!prof) return runExchange();
+			const std::chrono::steady_clock::time_point p0 = std::chrono::steady_clock::now();
+			const bool again = runExchange();
+			runNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - p0).count();
+			return again;
 		}
-		
-		if(!it->second) ready = false;
-	}
-	mtxNode.unlock();
 
-	if((ready) && (!finish() || !endN)){ 
-			pool->execAsync(this);
+		void setProfiling(bool on){ prof = on; }
+		long long getRunNs() const { return runNs; }        // includes getUpdateNs()
+		long long getUpdateNs() const { return updateNs; }
 
-	}
-	
-	return status;
-}
+		bool runExchange(){
+			if(pool->stopped()) return false;
+			++round;
+			// Even-odd scheme: pairs (0,1), (2,3), ... propose on odd rounds and pairs
+			// (1,2), (3,4), ... on even rounds. The node still runs, to keep the graph.
+			if(tempUp) tempUp->propagate();
+			if(evenOdd && (((index + round) & 1) == 0)) return true;
+			++attempts;
 
-template<typename S>
-void NodeSwap<S>::swap(){
-	S aux = ((NodeMCMC<S>*)left)->getSol();
-	((NodeMCMC<S>*)left)->setSol(((NodeMCMC<S>*)right)->getSol());
-	((NodeMCMC<S>*)right)->setSol(aux); 
-	
-	// try to set the labels up and down
-	((NodeMCMC<S>*)left)->trySetLabels();
-	((NodeMCMC<S>*)right)->trySetLabels();
-	
-	// update flow
-	((NodeMCMC<S>*)left)->updateFlow();
-	((NodeMCMC<S>*)right)->updateFlow();
-	
-}
+			double temp1 = left->getTemp();
+			double temp2 = right->getTemp();
+			double energia1 = left->getEnergia();
+			double energia2 = right->getEnergia();
+			if(v1Compat){ energia1 = (double)(int)energia1; energia2 = (double)(int)energia2; }
 
-template<typename S>
-void NodeSwap<S>::start(){
-	pool->execAsync(this);
-}
+			if(tempUp){
+				replicaEstL.Push(energia1);
+				replicaEstR.Push(energia2);
+			}
+
+			// Calculation of the exponent of exp
+			double deltaBeta = ((1.0/temp1) - (1.0/temp2)) * (energia1-energia2);
+
+			// When delta is greater than or equal to 0, it always changes
+			const double prob = (deltaBeta >= 0) ? 1.0 : std::exp(deltaBeta);
+			if(tempUp) tempUp->addProbability(prob);
+			if(deltaBeta >= 0 || dis(gen) <= prob){
+				swap();
+				++accept;
+				++acceptTotal;
+			}
+
+			if(tempUp && (attempts == nextUpdate)){
+				std::chrono::steady_clock::time_point u0;
+				if(prof) u0 = std::chrono::steady_clock::now();
+				tempUp->setacceptRate((double)accept/(double)(v1Compat ? (long long)round : window));
+				tempUp->setEnergy(replicaEstL.Mean(), replicaEstR.Mean());
+				tempUp->run();
+				accept = 0;
+				replicaEstL.Clear();
+				replicaEstR.Clear();
+				if(growth > 1.0) window = std::max(window + 1, (long long)((double)window*growth + 0.5));
+				nextUpdate += window;
+				if(prof) updateNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - u0).count();
+			}
+
+			return true;
+		}
+
+		void swap(){
+			left->swapWith(*right);
+
+			// try to set the labels up and down
+			left->trySetLabels();
+			right->trySetLabels();
+
+			// update flow
+			left->updateFlow();
+			right->updateFlow();
+		}
+
+		double getAcceptRate() const { return attempts ? (double)acceptTotal/(double)attempts : 0.0; }
+};
 
 #endif

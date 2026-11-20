@@ -13,7 +13,6 @@
 #include <list>
 #include <set>
 #include <map>
-#include <omp.h>
 #include <limits.h>
 #include <random>
 #include <cmath>
@@ -50,7 +49,7 @@ class RCPMS: public Problem<solRCPMS>{
 		~RCPMS();
 		solRCPMS construction();
 		solRCPMS neighbor(solRCPMS sol);
-		double evaluate(solRCPMS sol);
+		double evaluate(const solRCPMS& sol); // v2: no copy of the solution
 		int criticalMachine(solRCPMS* sol);
 };
 
