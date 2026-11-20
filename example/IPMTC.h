@@ -13,7 +13,6 @@
 #include <list>
 #include <set>
 #include <map>
-#include <omp.h>
 #include <limits.h>
 #include <random>
 #include <cmath>
@@ -53,7 +52,7 @@ class IPMTC: public Problem<solIPMTC>{
 		~IPMTC();
 		solIPMTC construction();
 		solIPMTC neighbor(solIPMTC sol);
-		double evaluate(solIPMTC sol);
+		double evaluate(const solIPMTC& sol); // v2: no copy of the solution
 		solIPMTC setCut(solIPMTC sol);
 		int GPCAIPMTC(std::vector<int> sol);
 

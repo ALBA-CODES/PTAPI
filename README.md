@@ -1,96 +1,118 @@
-<h1>PT Application Programming Interface</h1>
-<h2>Introduction</h2>
-<p>The proposed API offers a simple and efficient connection interface, implemented in C++, making it flexible for use across different platforms. The API usage involves three main steps: solution encoding and decoding, coding problem-specific components (evaluation function and movements), and connecting to the PT core implementation.</p>
+# PTAPI — Parallel Tempering API
 
-<h2>Step 1: Solution Encoding</h2>
-<p>In this step, a custom C++ structure is created to encode the solution. This structure extends the "solution" structure from the Problem.h file and should contain variables intended for encoding a solution to the problem. Below is an example structure for a permutation problem:</p>
+[![tests](https://github.com/ALBA-CODES/PTAPI/actions/workflows/ci.yml/badge.svg)](https://github.com/ALBA-CODES/PTAPI/actions/workflows/ci.yml)
+[![license: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue.svg)](LICENSE)
 
-<pre>
-struct solPermutation : public solution {
-    std::vector<int> sol;
-};
-</pre>
+A C++ library, headers only, that runs **Parallel Tempering** on multi-core
+machines for any optimization problem. You write one struct (the solution) and
+one class (how to build, change and evaluate a solution); the API runs the
+replicas in parallel, exchanges them, adjusts the temperatures and reports the
+results.
 
-<h2>Step 2: Problem-Specific Components</h2>
-<p>A C++ class is constructed to identify the problem-specific components. This class must implement the Problem interface and include functions for constructing initial solutions, generating neighboring solutions, and evaluating solutions.</p>
+This is **version 2**. Programs written for version 1 compile without changes;
+see [what is new](CHANGELOG.md) and
+[Migrating from version 1](docs/migrating-from-v1.md).
 
-<pre>
-class Permutation : public Problem {
+## Quick start
+
+```cpp
+#include "include/PT.h"
+
+// Step 1: the solution
+struct solTSP: public solution{ std::vector<int> sol; };
+
+// Step 2: the problem
+class TSP: public Problem<solTSP>{
 public:
-    Permutation(std::string filename);
-    solPermutation construction();
-    solPermutation neighbor(solPermutation sol);
-    double evaluate(solPermutation sol);
+    solTSP construction();                  // an initial solution, already evaluated
+    solTSP neighbor(solTSP sol);            // one move
+    double evaluate(const solTSP& sol);     // the cost (minimized)
 };
-</pre>
 
-<h2>Step 3: Connecting to PT Core</h2>
-<p>In this step, an object of the previously created class is instantiated, and an object of type PT is created with the desired parameters. Finally, the PT algorithm is started, and the best solution found is returned.</p>
-
-<pre>
-#include "../include/PT.h"
-#include "../include/Permutation.h"
-
-int main(int argc, char* argv[]) {
-    Permutation* prob = new Permutation("F1001.txt");
-    PT&lt;solPermutation&gt; algo(0.01, 1.0, 20, 200, 1000, 1, 3, 200);
-    solPermutation sol = algo.start(20, prob);
-    std::cout << sol.evalSol;
+// Step 3: the PT
+int main(){
+    TSP prob(/* instance */);
+    //              Tmin  Tmax  replicas MCL  PTL  distribution update interval
+    PT<solTSP> pt(1.0f, 60.0f, 16,     500, 1000, 4,          0,     50);
+    pt.setSeed(42);
+    pt.setTimeLimit(30.0);
+    solTSP best = pt.start(0, &prob);       // 0 = all the cores
+    std::cout << best.evalSol << "\n";
 }
-</pre>
+```
 
-<h2>Explanation of PT Class Parameters and start Function</h2>
+```
+g++ main.cpp -std=c++17 -O3 -pthread -o main
+```
 
-<p>The parameters of the <code>PT</code> class and the <code>start</code> function are as follows:</p>
+A complete program is [`example/quickstart.cpp`](example/quickstart.cpp),
+explained line by line in [Getting started](docs/getting-started.md).
 
-<ol>
-  <li><strong>Initial temperature (float):</strong> Represents the starting temperature value used in the PT process.</li>
-  <li><strong>Final temperature (float):</strong> Denotes the final temperature value used in the PT process.</li>
-  <li><strong>Number of replicas (int):</strong> Specifies the number of replicas used in the parallel tempering algorithm.</li>
-  <li><strong>Length of the homogeneous Markov chain (int):</strong> Indicates the length of the Markov chain used in each replica during the simulation.</li>
-  <li><strong>Number of exchanges between temperatures (int):</strong> Defines the number of exchanges attempted between adjacent temperatures in the parallel tempering algorithm.</li>
-  <li><strong>Initial temperature distribution (int):</strong> Specifies the method used to distribute initial temperatures across replicas in the parallel tempering algorithm. This parameter can take the following values:
-    <ul>
-      <li>1 (Linear): Initial temperatures are distributed linearly from the starting temperature to the final temperature.</li>
-      <li>2 (Inverse Linear): Initial temperatures are distributed inversely linearly from the final temperature to the starting temperature.</li>
-      <li>3 (Exponential): Initial temperatures are distributed exponentially between the starting temperature and the final temperature.</li>
-      <li>4 (Geometric Progression): Initial temperatures are distributed in a geometric progression from the starting temperature to the final temperature.</li>
-    </ul>
-  </li>
-  <li><strong>Automatic temperature update (int):</strong> Specifies the method used to automatically update temperatures during the PT process. This parameter can take the following values:
-    <ul>
-      <li>0 (Disabled): Automatic temperature updating is disabled.</li>
-      <li>1 (23%): Temperature is updated to a acceptance rate of 23% .</li>
-      <li>2 (Equal Acceptance Rates): Temperature is updated based on equal acceptance rates in adjacent temperatures.</li>
-      <li>3 (Feedback Optimized): Temperature is updated using feedback-optimized methods.</li>
-    </ul>
-  </li>
-  <li><strong>Temperature update rate (int):</strong> Represents the rate at which the temperature is updated during the PT process.</li>
-</ol>
+## What it does
 
-<p>The <code>start</code> function initializes the execution of the <code>PT</code> algorithm, taking the following parameters:</p>
+- **Parallel by construction.** The run is a dataflow graph executed by a
+  thread pool; with a seed, the result does not depend on the number of threads.
+- **Generic.** The core knows nothing about the problem. Three forms of
+  `evaluate`, optional delta evaluation without copies (`neighborEval`),
+  several moves with probabilities, a constructive heuristic for each replica.
+- **Stop criteria.** Rounds, time, target value, lower bound with a gap,
+  stagnation, a condition of your own.
+- **Temperatures.** Four initial distributions, seven dynamic updates, two
+  automatic calibrations, the even-odd (non-reversible) exchange scheme, and
+  diagnostics of the ladder (exchange rates, round trips, communication
+  barrier).
+- **Long runs.** Checkpoint and resume.
+- **Experiments.** R executions per instance with summaries in CSV, text and
+  LaTeX, convergence and time-to-target files with ready figures, and the
+  statistical comparison of configurations (Mann-Whitney, Wilcoxon, Friedman).
+- **Tuning.** Every parameter on the command line and a ready scenario for
+  [irace](https://mlopez-ibanez.github.io/irace/).
 
-<ol>
-  <li><strong>Number of threads (int):</strong> Specifies the number of threads to be created and used in the parallel tempering algorithm.</li>
-  <li><strong>Pointer to the problem object (Problem*):</strong> Points to the object referring to the problem created by the user, which implements the necessary functions for problem-dependent components such as construction, neighbor generation, and evaluation.</li>
-</ol>
+## Documentation
 
+The [manual](docs/README.md):
+[getting started](docs/getting-started.md) ·
+[the problem class](docs/problem.md) ·
+[configuring the run](docs/configuration.md) ·
+[stop criteria](docs/stopping.md) ·
+[temperatures](docs/temperatures.md) ·
+[results](docs/results.md) ·
+[experiments](docs/experiments.md) ·
+[command line and irace](docs/tuning.md) ·
+[migrating from version 1](docs/migrating-from-v1.md) ·
+[reference](docs/reference.md)
 
-<h2>Folder Structure</h2>
-<pre>
-📦Project
- ┣ 📂include
- ┃ ┗ 📜API core files
- ┣ 📂instances
- ┃ ┗ 📜instance files for the examples
- ┣ 📂example
- ┃ ┗ 📜mainSSP.cpp
- ┃ ┗ 📜mainIPMTC.cpp
- ┃ ┗ 📜mainRCPMS.cpp
-</pre>
+## Repository
 
-<p>Within the "example" folder, you will find three sample files demonstrating how to use the API for the SSP, IPMTC, and RCPMS problems. Each file contains code examples illustrating how to compile and execute the algorithm to solve each specific problem. These examples are provided to assist users in understanding how to integrate the API into their own projects and utilize its functionalities to solve various optimization problems.</p>
+```
+include/    the API (headers only); Experiment.h, Comparison.h and Options.h are optional
+example/    quickstart.cpp, exampleTSP.cpp and the SSP, IPMTC and RCPMS examples
+  functions/  one short example for each group of functions
+instances/  instance files of the examples
+irace/      tuning the parameters with irace
+tests/      unit tests
+bench/      speed of version 2 against version 1
+v1/         the core of version 1, kept for the benchmark
+docs/       the manual and the technical report of version 2 (in Portuguese)
+```
 
-<h2>License</h2>
-<p>The API is available for download under the Creative Commons BY-NC license (CC BY-NC) at: <a href="https://creativecommons.org/licenses/">https://creativecommons.org/licenses/</a>. It can be used and adapted for non-commercial purposes, with proper credit given.</p>
+```
+make test       # unit tests
+make check      # the same, also under ThreadSanitizer and AddressSanitizer
+make examples   # builds and runs the examples
+make bench      # version 2 against version 1 (on an idle machine)
+```
 
+Requirements: a C++17 compiler (GCC or Clang) and POSIX threads.
+
+## Citing
+
+If you use PTAPI in your research, please cite the thesis in which it was
+proposed; the data are in [`CITATION.cff`](CITATION.cff) (the "Cite this
+repository" button of GitHub).
+
+## License
+
+[Creative Commons Attribution-NonCommercial 4.0 International](LICENSE)
+(CC BY-NC 4.0), the same license of version 1: PTAPI can be used and adapted
+for non-commercial purposes, with proper credit given.

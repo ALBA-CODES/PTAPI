@@ -1,0 +1,39 @@
+#!/bin/bash
+###############################################################################
+# PTAPI v2 - target runner for irace.
+#
+# irace calls:  target-runner <id.configuration> <id.instance> <seed> <instance> <parameters>
+# and reads one number from the standard output: the cost of the configuration
+# on that instance (smaller is better).
+#
+# Every candidate configuration receives the same budget (FIXED), otherwise
+# irace would simply choose the configuration that runs longer.
+###############################################################################
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXE="$DIR/ptSSP"
+
+# Budget and options that are NOT tuned. PTL is "infinite": the time limit stops
+# the run. --THREAD_USED: threads of each execution (see 'parallel' in scenario.txt).
+FIXED="--PTL 2000000000 --TIME_LIMIT 1.0 --THREAD_USED 8 --IRACE 1"
+
+# What irace minimizes (see ../docs/tuning.md):
+#   objective value after the time limit (default):  nothing to add
+#   time to reach a target value:                    FIXED="$FIXED --TARGET 252 --IRACE_COST time"
+#   value plus a price for each second:              FIXED="$FIXED --IRACE_COST value+time --IRACE_TIME_WEIGHT 0.5"
+
+error(){ echo "$(TZ=UTC date): $0: error: $*" >&2; exit 1; }
+
+CONFIG_ID=$1
+INSTANCE_ID=$2
+SEED=$3
+INSTANCE=$4
+shift 4 || error "not enough parameters"
+CONFIG_PARAMS=$*
+
+[ -x "$EXE" ] || error "$EXE: not found or not executable (run 'make' in $DIR)"
+
+OUT=$("$EXE" "$INSTANCE" --SEED "$SEED" $FIXED $CONFIG_PARAMS) || error "$EXE failed on $INSTANCE with: $CONFIG_PARAMS"
+COST=$(echo "$OUT" | tail -n 1)
+[[ "$COST" =~ ^[[:space:]]*[+-]?[0-9] ]] || error "the output is not a number: $OUT"
+echo "$COST"
+exit 0

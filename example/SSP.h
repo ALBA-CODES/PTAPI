@@ -13,7 +13,6 @@
 #include <list>
 #include <set>
 #include <map>
-#include <omp.h>
 #include <limits.h>
 #include <random>
 #include <cmath>
@@ -47,7 +46,7 @@ class SSP: public Problem<solSSP>{
 		~SSP();
 		solSSP construction();
 		solSSP neighbor(solSSP sol);
-		double evaluate(solSSP sol);
+		double evaluate(const solSSP& sol); // v2: no copy of the solution
 
 };
 

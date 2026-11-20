@@ -8,31 +8,22 @@
 
 class ExecTime{
 	private:
-		std::chrono::high_resolution_clock::time_point start;
+		std::chrono::steady_clock::time_point start;
 
 	public:
-		ExecTime();
-		void printTime();
-		int getTimeMs();
-		~ExecTime();
+		ExecTime(): start(std::chrono::steady_clock::now()) {}
+		~ExecTime(){}
+
+		void reset(){ start = std::chrono::steady_clock::now(); }
+
+		void printTime(){
+			std::cout << getTimeMs() << " ms\n";
+		}
+
+		int getTimeMs(){
+			auto duration = std::chrono::steady_clock::now() - start;
+			return (int)std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+		}
 };
-
-
-ExecTime::ExecTime()
-	: start(std::chrono::high_resolution_clock::now()) 
-	{}
-
-void ExecTime::printTime(){	
-	auto duration = std::chrono::high_resolution_clock::now() - start;
-	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() << " ms\n";	
-} 
-
-int ExecTime::getTimeMs(){
-	auto duration = std::chrono::high_resolution_clock::now() - start;
-	return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();	
-}
-
-ExecTime::~ExecTime(){
-}
 
 #endif

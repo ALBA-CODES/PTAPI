@@ -81,8 +81,8 @@ IPMTC::~IPMTC(){
 solIPMTC IPMTC::construction(){
 	
 	solIPMTC ss;
-	std::random_device rnd_device;
-	std::mt19937 mersenne_engine {rnd_device()}; 
+	// v2: random engine of the replica (fast and reproducible with PT::setSeed)
+	ptapi::Rng& mersenne_engine = ptapi::rng(); 
 	
 	for(int i=0; i< numberJobs; i++){
 		ss.sol.push_back(i);
@@ -107,15 +107,12 @@ solIPMTC IPMTC::construction(){
 
 // 2-opt neighbor moviment
 solIPMTC IPMTC::neighbor(solIPMTC sol){
-	solIPMTC s;
-	s.sol = sol.sol;
-	s.cutEnd = sol.cutEnd;
-	s.cutStart = sol.cutStart;
+	solIPMTC& s = sol;   // v2: the argument is already a copy; it is changed and returned
 
 	int first = 0;
 	int last = 0;
-	std::random_device rnd_device;
-	std::mt19937 mersenne_engine {rnd_device()};
+	// v2: random engine of the replica (fast and reproducible with PT::setSeed)
+	ptapi::Rng& mersenne_engine = ptapi::rng();
 	std::uniform_int_distribution<int> dist {0, (numberJobs-1)};
 	
 	do {		
@@ -131,14 +128,10 @@ solIPMTC IPMTC::neighbor(solIPMTC sol){
 		last--;
 	}
 	
-	s.Nup = sol.Nup;
-	s.Ndown = sol.Ndown;
-
-			
-	return s;
+	return sol;
 }
 
-double IPMTC::evaluate(solIPMTC sol){
+double IPMTC::evaluate(const solIPMTC& sol){
 	
 	int pipes_count = 0;
 	int last_full = 0;

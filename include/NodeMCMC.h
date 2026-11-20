@@ -1,285 +1,220 @@
 #ifndef __NODEMCMC_H__
 #define __NODEMCMC_H__
 
+#include <cmath>
 #include <random>
 #include <atomic>
+#include <utility>
+#include <vector>
+#include <mutex>
+#include <chrono>
+#include "Problem.h"
 #include "Consumer.h"
 
+// MC node: one homogeneous Markov chain (MCL steps) at one temperature.
 template<typename S>
-class NodeMCMC: public Node{
+class alignas(64) NodeMCMC: public Node{
 	private:
 		int MCL;
-		atomic_int nUp = 0;
-		atomic_int nDown = 0;
-		int currentMCMC = 0;
-		int evalValue = 0;
-		double temp;
+		int PTL;
+		int round = 0;                 // completed executions of this node
+		std::atomic<double> temp;
 		Problem<S>* prob;
+		Consumer<S>* pool;
 		S sol;
 		S neigh;
-		S neighAux;
-		int accept = 0; 
-		S bestSol;
-		Consumer<S>* pool;
+		long long accept = 0;          // accepted moves (whole run)
+		long long evals = 0;           // evaluated neighbors (whole run)
+		int label = 0;                 // round-trip label of the replica: 0 none, 1 up, 2 down
+		long long roundTrips = 0;
+		std::atomic<long long> nUp{0};
+		std::atomic<long long> nDown{0};
 		bool firstTemp = false;
 		bool lastTemp = false;
-		atomic_bool fase = true;
-		atomic_bool final = false;
-		atomic_bool stop = false;
-		atomic_bool th2 = false;
-		std::function<void(void)> exec;
-		std::default_random_engine gen;
-		std::uniform_real_distribution<double> dis;
-		mutex mtxPara;
+		ptapi::Rng gen;
+		std::uniform_real_distribution<double> dis{0.0, 1.0};
+		// statistics of the moves registered with Problem::setMoveProbabilities
+		int nMoves = 0;
+		std::vector<long long> moveProposed, moveAccepted;
+		// copy of the state for the periodic checkpoint (see Consumer::checkpointEpoch)
+		int seenEpoch = 0;
+		std::mutex snapMtx;
+		bool hasSnap = false;
+		S snapSol;
+		double snapTemp = 0.0;
+		int snapRound = 0;
+		// time spent in this node (only measured with PT::setProfiling)
+		bool prof = false;
+		long long runNs = 0;
 
+		void snapshot(int epoch){
+			std::lock_guard<std::mutex> lock(snapMtx);
+			snapSol = sol;
+			snapTemp = temp.load(std::memory_order_relaxed);
+			snapRound = round;
+			hasSnap = true;
+			seenEpoch = epoch;
+		}
 
 	public:
-		
-		NodeMCMC(int MCL_,atomic<int>* PTL_, double temp_, Problem<S>* prob_,Consumer<S>* pool_, int timePTEnd, float maxPerc);
-		~NodeMCMC();
-		void run();
-		bool ready();
-		bool notify();
-		bool observer(Node* from);
-		double getTemp();
-		int getEnergia();
-		double getAccept();
-		void start();
-		void setSolUp();
-		double getFlow();
-		void resetFlow();
-		void threadRun();
-		S getSol();
-		void updateFlow();
-		void setLastTemp();
-		void setFirstTemp();
-		void trySetLabels();
-		void setTemp(double t);
-		void setSol(S sol_);
-		bool setBestSol(S sol_);
-};
-
-
-template<typename S>
-NodeMCMC<S>::NodeMCMC(int MCL_, atomic<int>* PTL_, double temp_, Problem<S>* prob_,Consumer<S>* pool_, int timePTEnd, float maxPerc)
-:MCL(MCL_)
-,temp(temp_)
-,prob(prob_)
-,pool(pool_)
-{
-	execMax = PTL_;
-	maxtime = timePTEnd;
-	maxPercPTL = maxPerc;
-	indexPT = pool_->getIndexPT();
-	sol = prob->construction();
-	bestSol = sol;
-				
-}
-
-template<typename S>
-NodeMCMC<S>::~NodeMCMC(){
-}
-
-template<typename S>
-void NodeMCMC<S>::run(){
-	
-	// calc MCMC
-	for (int i = 0; i < MCL; i++){
-		
-		// create neighbor									
-		neigh = prob->neighbor(sol);
-
-		// Calc evaluate function 
-		neigh.evalSol = prob->evaluate(neigh); 
-		
-		// Save best sol			
-		setBestSol(neigh);
-				
-		//calc delta
-		double delta = neigh.evalSol - sol.evalSol;
-					
-		// Less or equal to 0, accepted
-		if (delta <= 0.0){
-			// 
-			sol = neigh;
-			++accept;
-		}else{
-			//Calc of probability of acceptance
-			double param, probab;
-			param = -(delta/temp);
-			probab = exp(param);
-					
-			//Swap accept
-			if(dis(gen) <= probab){
-				sol = neigh;
-				++accept;
-			} //End if					
-		} //End if/else 				
-	} //End for
-
-	if(theEnd()){
-		pool->theEnd(bestSol);
-		endN = true;
-	}
-	
-	// Reset to receve new request
-	reset();
-	// Notify nodes forward	
-	notify();
-}
-
-// Checks dependencies against connected nodes
-template<typename S>
-bool NodeMCMC<S>::ready(){
-	
-	for(vector<std::pair<Node*,bool>>::iterator it = edgeto.begin(); it != edgeto.end(); it++){
-		if(!it->second) return false;
-	}
-	
-	return true;
-}
-
-// Notifies all forward nodes connected to the MC node
-template<typename S>
-bool NodeMCMC<S>::notify(){
-	
-	for(vector<std::pair<Node*,bool>>::iterator it = edgeFrom.begin(); it != edgeFrom.end(); it++){
-		Node* to = it->first;
-		if(!to->observer(this))return false; 	
-	}
-	
-	return true;
-}
-
-// Received notifications from connected nodes
-template<typename S>
-bool NodeMCMC<S>::observer(Node* from){
-	bool status = false;
-	bool ready = true;
-	
-	mtxNode.lock();
-	for(vector<std::pair<Node*,bool>>::iterator it = edgeto.begin(); it != edgeto.end(); it++){
-		
-		if(it->first == from){
-			it->second = true;
-			status = true;
+		NodeMCMC(int MCL_, int PTL_, double temp_, Problem<S>* prob_, Consumer<S>* pool_, ptapi::Rng gen_, int firstRound = 0)
+		: MCL(MCL_), PTL(PTL_), round(firstRound), temp(temp_), prob(prob_), pool(pool_), gen(gen_) {
+			nMoves = prob->getMoveCount();
+			moveProposed.assign(nMoves, 0);
+			moveAccepted.assign(nMoves, 0);
 		}
-		
-		if(!it->second) ready = false;
-	}
-	mtxNode.unlock();
-	
-	// Check dependency, if not, place it in the execution queue
-	if((ready) && (!finish() || !endN)){
-		pool->execAsync(this);	
-	}
-	
-	return status;
-}
 
-// Returns the temperature
-template<typename S>
-double NodeMCMC<S>::getTemp(){
-	return temp;
-}
+		// Initial solution: built by the problem, or given by the user (already evaluated).
+		// 'index' and 'count': position of the replica in the ladder (see Problem::constructionReplica)
+		void init(const S* given, int index = 0, int count = 1){
+			ptapi::detail::currentRng() = &gen;
+			struct Clear{ ~Clear(){ ptapi::detail::currentRng() = nullptr; } } clear;   // also if the problem code throws
+			if(given) sol = *given; else sol = prob->constructionReplica(index, count);
+			ptapi::detail::currentRng() = nullptr;
+			neigh = sol;
+			pool->setBestSol(sol, round);
+		}
 
-// Return the energy
-template<typename S>
-int NodeMCMC<S>::getEnergia(){
-	return sol.evalSol;
-}
+		bool run() override {
+			if(!prof) return runChain();
+			const std::chrono::steady_clock::time_point p0 = std::chrono::steady_clock::now();
+			const bool again = runChain();
+			runNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - p0).count();
+			return again;
+		}
 
-// Return current solution
-template<typename S>
-S NodeMCMC<S>::getSol(){
-	return sol;
-}
+		void setProfiling(bool on){ prof = on; }
+		long long getRunNs() const { return runNs; }
 
-// Change current solution
-template<typename S>
-void NodeMCMC<S>::setSol(S sol_){
-	sol = sol_;
-	setBestSol(sol);
-}
+		bool runChain(){
+			if(pool->stopped()) return false;
 
-// keep the best solution
-template<typename S>
-bool NodeMCMC<S>::setBestSol(S sol_){
-	if (sol_.evalSol<bestSol.evalSol) {
-		bestSol = sol_;
-		pool->setBestSol(sol_,execAtual);
-		return true;
-	}
-	
-	return false;
-}
+			ptapi::detail::currentRng() = &gen;
+			const double t = temp.load(std::memory_order_relaxed);
+			int done = 0;
 
-// Places the node in the execution queue
-template<typename S>
-void NodeMCMC<S>::start(){
-	pool->execAsync(this);
-}
+			try{
+				if(nMoves == 0){
+					while(done < MCL){
+						// neighbor + evaluation (problem dependent)
+						prob->neighborEval(sol, neigh);
+						++done;
 
-// Seta uma nova Temperatura
-template<typename S>
-void NodeMCMC<S>::setTemp(double t){
-	temp = t;
-}
+						double delta = neigh.evalSol - sol.evalSol;
 
-// Returns the acceptance rate
-template<typename S>
-double NodeMCMC<S>::getAccept(){
-	double rate = ((double)accept/(double)(execAtual*MCL));
-	accept = 0;
-	return rate;
-}
+						// Metropolis acceptance
+						if(delta <= 0.0 || dis(gen) <= std::exp(-(delta/t))){
+							std::swap(sol, neigh);
+							++accept;
+							if(delta < 0.0) pool->setBestSol(sol, round);
+						}
 
-// Check if it is the last temperature
-template<typename S>
-void NodeMCMC<S>::setLastTemp(){
-	lastTemp = true;
-}
+						if(pool->stopped()) break;
+					}
+				}else{
+					// the same loop, also counting which registered move was used
+					int& lastMove = ptapi::detail::lastMove();
+					while(done < MCL){
+						lastMove = -1;
+						prob->neighborEval(sol, neigh);
+						++done;
+						const int mv = lastMove;
+						const bool counted = (mv >= 0) && (mv < nMoves);
+						if(counted) ++moveProposed[mv];
 
-// Check if it is the first temperature
-template<typename S>
-void NodeMCMC<S>::setFirstTemp(){
-	firstTemp = true;
-}
+						double delta = neigh.evalSol - sol.evalSol;
 
-// Load roundtrip labels
-template<typename S>
-void NodeMCMC<S>::trySetLabels(){
-	if(firstTemp){
-		sol.Nup = true;
-		sol.Ndown = false;
-	} else if(lastTemp){
-		sol.Nup = false;
-		sol.Ndown = true;
-	}
-}
+						if(delta <= 0.0 || dis(gen) <= std::exp(-(delta/t))){
+							std::swap(sol, neigh);
+							++accept;
+							if(counted) ++moveAccepted[mv];
+							if(delta < 0.0) pool->setBestSol(sol, round);
+						}
 
-// Update the flow 
-template<typename S>
-void NodeMCMC<S>::updateFlow(){
-	if(sol.Nup) ++nUp;
-	else if(sol.Ndown) ++nDown;
-}
+						if(pool->stopped()) break;
+					}
+				}
+			}catch(...){
+				// exception thrown by the problem code
+				ptapi::detail::currentRng() = nullptr;
+				pool->fail(std::current_exception());
+				return false;
+			}
 
-// Return the flow
-template<typename S>
-double NodeMCMC<S>::getFlow(){	
-	
-	if((nUp+nDown) == 0) return 0;
-	double f = ((double)nUp/(double)(nUp+nDown));
-	return f; 
-}
+			ptapi::detail::currentRng() = nullptr;
+			evals += done;
+			++round;
+			pool->checkStagnation(round);
+			if(firstTemp && pool->hasCondition()){
+				try{ pool->checkCondition(round); }
+				catch(...){ pool->fail(std::current_exception()); return false; }
+			}
+			const int epoch = pool->checkpointEpoch();
+			if(epoch != seenEpoch) snapshot(epoch);
 
-// Reset the flow
-template<typename S>
-void NodeMCMC<S>::resetFlow(){	
-		
-	nUp = 0;
-	nDown = 0;
-}
+			return (round < PTL) && !pool->stopped();
+		}
+
+		double getTemp() const { return temp.load(std::memory_order_relaxed); }
+		void setTemp(double t){ temp.store(t, std::memory_order_relaxed); }
+		double getEnergia() const { return sol.evalSol; }
+		const S& getSol() const { return sol; }
+		int getRound() const { return round; }
+		long long getEvals() const { return evals; }
+		double getAccept() const { return evals ? (double)accept/(double)evals : 0.0; }
+
+		void setFirstTemp(){ firstTemp = true; }
+		void setLastTemp(){ lastTemp = true; }
+
+		// Exchange of replicas (solution + round-trip label) between two temperatures.
+		void swapWith(NodeMCMC<S>& other){
+			std::swap(sol, other.sol);
+			std::swap(label, other.label);
+		}
+
+		// Load round-trip labels
+		void trySetLabels(){
+			if(firstTemp){
+				if(label == 2) ++roundTrips;   // came back from the last temperature
+				label = 1;
+			}
+			else if(lastTemp) label = 2;
+		}
+		// Replicas that went from the first temperature to the last and came back
+		// (counted at the node of the first temperature).
+		long long getRoundTrips() const { return roundTrips; }
+
+		void updateFlow(){
+			if(label == 1) nUp.fetch_add(1, std::memory_order_relaxed);
+			else if(label == 2) nDown.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		double getFlow() const {
+			long long u = nUp.load(std::memory_order_relaxed), d = nDown.load(std::memory_order_relaxed);
+			if((u+d) == 0) return 0;
+			return (double)u/(double)(u+d);
+		}
+
+		// true if a labelled replica has visited this temperature since the last reset
+		bool hasFlow() const {
+			return (nUp.load(std::memory_order_relaxed) + nDown.load(std::memory_order_relaxed)) > 0;
+		}
+
+		const std::vector<long long>& getMoveProposed() const { return moveProposed; }
+		const std::vector<long long>& getMoveAccepted() const { return moveAccepted; }
+
+		// Last copy taken for the checkpoint (false if there is none yet).
+		bool getSnapshot(S& s, double& t, int& r){
+			std::lock_guard<std::mutex> lock(snapMtx);
+			if(!hasSnap) return false;
+			s = snapSol; t = snapTemp; r = snapRound;
+			return true;
+		}
+
+		void resetFlow(){
+			nUp.store(0, std::memory_order_relaxed);
+			nDown.store(0, std::memory_order_relaxed);
+		}
+};
 
 #endif

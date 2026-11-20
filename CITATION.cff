@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use PTAPI in your research, please cite the thesis below."
+title: "PTAPI: Parallel Tempering Application Programming Interface"
+type: software
+version: 2.0.0
+license: CC-BY-NC-4.0
+repository-code: "https://github.com/ALBA-CODES/PTAPI"
+authors:
+  - family-names: "Almeida"
+    given-names: "André Luís Barroso"
+preferred-citation:
+  type: thesis
+  thesis-type: "Doctoral thesis"
+  title: "Revisitando o revenimento paralelo: computação de alto desempenho e aplicação em pesquisa operacional"
+  authors:
+    - family-names: "Almeida"
+      given-names: "André Luís Barroso"
+  institution:
+    name: "Universidade Federal de Ouro Preto"
+  year: 2024
+  url: "https://www.repositorio.ufop.br/handle/123456789/18678"

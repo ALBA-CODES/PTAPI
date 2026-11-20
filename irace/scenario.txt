@@ -1,0 +1,18 @@
+## PTAPI v2 - irace scenario (run 'make tune' in this folder).
+parameterFile = "./parameters.txt"
+targetRunner = "./target-runner"
+execDir = "./"
+logFile = "./irace.Rdata"
+
+## Training instances: every file of the folder (or list them in a file with
+## trainInstancesFile).
+trainInstancesDir = "../instances/SSP"
+
+## Budget of the tuning: number of executions of the target runner.
+maxExperiments = 300
+
+## Executions of the target runner at the same time. Each execution of the PT
+## already uses several threads (--THREAD_USED in target-runner): keep
+## parallel x threads <= number of cores, or the time limit of each run will
+## not be a fair budget.
+parallel = 2

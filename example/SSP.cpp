@@ -50,8 +50,8 @@ SSP::~SSP(){
 
 solSSP SSP::construction(){
 	solSSP ss;
-    std::random_device rnd_device;
-    std::mt19937 mersenne_engine {rnd_device()}; 
+    // v2: random engine of the replica (fast and reproducible with PT::setSeed)
+    ptapi::Rng& mersenne_engine = ptapi::rng(); 
     	
 	for(int i=0; i< numberJobs; i++){
 		ss.sol.push_back(i);
@@ -60,20 +60,17 @@ solSSP SSP::construction(){
 	std::shuffle(begin(ss.sol), end(ss.sol), mersenne_engine);
 	
 	ss.evalSol = evaluate(ss);
-	ss.Nup = false;
-	ss.Ndown = false;
 	 
 	return ss;
 }
 
 // 2-opt neighbor moviment
 solSSP SSP::neighbor(solSSP sol){
-	solSSP s;
-	s.sol = sol.sol;
+	solSSP& s = sol;   // v2: the argument is already a copy; it is changed and returned
 	int first = 0;
 	int last = 0;
-	std::random_device rnd_device;
-	std::mt19937 mersenne_engine {rnd_device()};
+	// v2: random engine of the replica (fast and reproducible with PT::setSeed)
+	ptapi::Rng& mersenne_engine = ptapi::rng();
 	std::uniform_int_distribution<int> dist {0, (numberJobs-1)};
 	
 	do {		
@@ -89,14 +86,10 @@ solSSP SSP::neighbor(solSSP sol){
 		last--;
 	}
 	
-	s.Nup = sol.Nup;
-	s.Ndown = sol.Ndown;
-
-			
-	return s;
+	return sol;
 }
 
-double SSP::evaluate(solSSP sol){
+double SSP::evaluate(const solSSP& sol){
 	
 	int pipes_count = 0;
 	int last_full = 0;
